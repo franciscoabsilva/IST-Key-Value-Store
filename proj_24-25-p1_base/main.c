@@ -3,11 +3,18 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <dirent.h>
+
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
 
-int main() {
+int main(int argc, char *argv[]) {
+
+  const char *directory_path = argv[1];
+  int backup_counter = argv[2];
+
+
 
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
