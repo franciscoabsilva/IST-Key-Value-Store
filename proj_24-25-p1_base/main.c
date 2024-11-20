@@ -2,35 +2,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <dirent.h>
+#include <fcntl.h> //???? soa bue suspeito, é mm?
 
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
+#define PATH_MAX 4096 //???? provalvemente nao é preciso
 
-int has_job_extension(const char *filename) {
-    const char *ext = ".job";
-    size_t len_filename = strlen(filename);
-    size_t len_ext = strlen(ext);
-    return len_filename > len_ext &&
-           strcmp(filename + len_filename - len_ext, ext) == 0;
-}
 
 int main(int argc, char *argv[]) {
 
+  // check if the correct number of arguments was passed
+  if(argc != 3) return 1;
+  
   const char *directory_path = argv[1];
-  int backup_counter = atoi(argv[2]);
+  //int backup_counter = atoi(argv[2]);
 
   DIR *dir = opendir(directory_path);
   struct dirent *entry;
-
-  if (kvs_init()) {
-    fprintf(stderr, "Failed to initialize KVS\n");
+  
+  // check if the directory exists
+  if(dir == NULL){
+    fprintf(stderr, "Failed to open directory\n");
     return 1;
   }
 
-  while (1) {
+  if (kvs_init()) {
+    closedir(dir);
+    fprintf(stderr, "Failed to initialize KVS\n");
+    return 1;
+  }
+  
+  while ((entry = readdir(dir)) != NULL) {
+
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     unsigned int delay;
@@ -39,94 +46,109 @@ int main(int argc, char *argv[]) {
     printf("> ");
     fflush(stdout);
 
-    switch (get_next(STDIN_FILENO)) {
-      case CMD_WRITE:
-        num_pairs = parse_write(STDIN_FILENO, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-        if (num_pairs == 0) {
+    if (!strstr(entry->d_name, ".job")) continue; 
+    char file_path[PATH_MAX];
+    snprintf(file_path, sizeof(file_path), "%s/%s", directory_path, entry->d_name);
+
+    int fd = open(file_path, O_RDONLY);
+    if (fd == -1){
+      close(fd);
+      fprintf(stderr, "Failed to open file\n");
+      continue;
+    }
+
+    // get the first line of text in the file
+    while (1) {
+      switch (get_next(fd)) {
+        case CMD_WRITE:
+          num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+          if (num_pairs == 0) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+
+          if (kvs_write(num_pairs, keys, values)) {
+            fprintf(stderr, "Failed to write pair\n");
+          }
+          break;
+
+        case CMD_READ:
+          num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+
+          if (num_pairs == 0) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+
+          if (kvs_read(num_pairs, keys)) {
+            fprintf(stderr, "Failed to read pair\n");
+          }
+          break;
+
+        case CMD_DELETE:
+          num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+
+          if (num_pairs == 0) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+
+          if (kvs_delete(num_pairs, keys)) {
+            fprintf(stderr, "Failed to delete pair\n");
+          }
+          break;
+
+        case CMD_SHOW:
+
+          kvs_show();
+          break;
+
+        case CMD_WAIT:
+          if (parse_wait(fd, &delay, NULL) == -1) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+
+          if (delay > 0) {
+            printf("Waiting...\n");
+            kvs_wait(delay);
+          }
+          break;
+
+        case CMD_BACKUP:
+
+          if (kvs_backup()) {
+            fprintf(stderr, "Failed to perform backup.\n");
+          }
+          break;
+
+        case CMD_INVALID:
           fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
+          break;
 
-        if (kvs_write(num_pairs, keys, values)) {
-          fprintf(stderr, "Failed to write pair\n");
-        }
+        case CMD_HELP:
+          printf( 
+              "Available commands:\n"
+              "  WRITE [(key,value),(key2,value2),...]\n"
+              "  READ [key,key2,...]\n"
+              "  DELETE [key,key2,...]\n"
+              "  SHOW\n"
+              "  WAIT <delay_ms>\n"
+              "  BACKUP\n" // Not implemented
+              "  HELP\n"
+          );
 
-        break;
+          break;
+          
+        case CMD_EMPTY:
+          break;
 
-      case CMD_READ:
-        num_pairs = parse_read_delete(STDIN_FILENO, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-
-        if (num_pairs == 0) {
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-
-        if (kvs_read(num_pairs, keys)) {
-          fprintf(stderr, "Failed to read pair\n");
-        }
-        break;
-
-      case CMD_DELETE:
-        num_pairs = parse_read_delete(STDIN_FILENO, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-
-        if (num_pairs == 0) {
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-
-        if (kvs_delete(num_pairs, keys)) {
-          fprintf(stderr, "Failed to delete pair\n");
-        }
-        break;
-
-      case CMD_SHOW:
-
-        kvs_show();
-        break;
-
-      case CMD_WAIT:
-        if (parse_wait(STDIN_FILENO, &delay, NULL) == -1) {
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-
-        if (delay > 0) {
-          printf("Waiting...\n");
-          kvs_wait(delay);
-        }
-        break;
-
-      case CMD_BACKUP:
-
-        if (kvs_backup()) {
-          fprintf(stderr, "Failed to perform backup.\n");
-        }
-        break;
-
-      case CMD_INVALID:
-        fprintf(stderr, "Invalid command. See HELP for usage\n");
-        break;
-
-      case CMD_HELP:
-        printf( 
-            "Available commands:\n"
-            "  WRITE [(key,value),(key2,value2),...]\n"
-            "  READ [key,key2,...]\n"
-            "  DELETE [key,key2,...]\n"
-            "  SHOW\n"
-            "  WAIT <delay_ms>\n"
-            "  BACKUP\n" // Not implemented
-            "  HELP\n"
-        );
-
-        break;
-        
-      case CMD_EMPTY:
-        break;
-
-      case EOC:
-        kvs_terminate();
-        return 0;
+        case EOC:
+          close(fd);
+          kvs_terminate();
+          return 0;
+      }
     }
   }
+  closedir(dir);
 }
