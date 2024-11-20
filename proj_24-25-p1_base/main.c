@@ -9,12 +9,21 @@
 #include "parser.h"
 #include "operations.h"
 
+int has_job_extension(const char *filename) {
+    const char *ext = ".job";
+    size_t len_filename = strlen(filename);
+    size_t len_ext = strlen(ext);
+    return len_filename > len_ext &&
+           strcmp(filename + len_filename - len_ext, ext) == 0;
+}
+
 int main(int argc, char *argv[]) {
 
   const char *directory_path = argv[1];
-  int backup_counter = argv[2];
+  int backup_counter = atoi(argv[2]);
 
-
+  DIR *dir = opendir(directory_path);
+  struct dirent *entry;
 
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
