@@ -26,6 +26,7 @@ int main(int argc, char *argv[]) {
   
   // check if the directory exists
   if(dir == NULL){
+    closedir(dir);
     fprintf(stderr, "Failed to open directory\n");
     return 1;
   }
@@ -145,10 +146,10 @@ int main(int argc, char *argv[]) {
 
         case EOC:
           close(fd);
+          closedir(dir);
           kvs_terminate();
           return 0;
       }
     }
   }
-  closedir(dir);
 }
