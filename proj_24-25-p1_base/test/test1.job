@@ -1,0 +1,8 @@
+SHOW
+WAIT 2000
+HELP
+WAIT 2000
+SHOW
+WAIT 2000
+
+WRITE [(Escritor1,EcaDeQueiroz),(Escritor2,PedroDeQueiroz)]
