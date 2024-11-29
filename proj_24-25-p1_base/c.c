@@ -12,6 +12,7 @@
 #include "operations.h"
 #define PATH_MAX 4096 //???? provalvemente nao é preciso
 
+
 int main(int argc, char *argv[]) {
 
   // check if the correct number of arguments was passed
@@ -36,7 +37,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to initialize KVS\n");
     return 1;
   }
-
+  
   while ((entry = readdir(dir)) != NULL) {
 
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
@@ -57,8 +58,9 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Failed to open file\n");
       continue;
     }
-    
-    while(1){
+
+    // get the first line of text in the file
+    while (1) {
       switch (get_next(fd)) {
         case CMD_WRITE:
           num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
@@ -70,7 +72,6 @@ int main(int argc, char *argv[]) {
           if (kvs_write(num_pairs, keys, values)) {
             fprintf(stderr, "Failed to write pair\n");
           }
-
           break;
 
         case CMD_READ:
@@ -130,7 +131,7 @@ int main(int argc, char *argv[]) {
         case CMD_HELP:
           printf( 
               "Available commands:\n"
-              "  WRITE [(key,value)(key2,value2),...]\n"
+              "  WRITE [(key,value),(key2,value2),...]\n"
               "  READ [key,key2,...]\n"
               "  DELETE [key,key2,...]\n"
               "  SHOW\n"
