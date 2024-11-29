@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
   struct dirent *entry;
   
   // check if the directory exists
+  // ???? TODO ver se o dir é null se nao existir ou se isto é inutil
   if(dir == NULL){
     closedir(dir);
     fprintf(stderr, "Failed to open directory\n");
