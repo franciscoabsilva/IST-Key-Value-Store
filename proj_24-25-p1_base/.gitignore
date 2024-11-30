@@ -1,1 +1,3 @@
 *.o
+kvs
+test/
