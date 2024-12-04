@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
 
     if (!strstr(entry->d_name, ".job")) continue; 
+    fprintf(stderr, "Processing file %s\n", entry->d_name);
     char file_path[PATH_MAX];
     snprintf(file_path, sizeof(file_path), "%s/%s", directory_path, entry->d_name);
 
@@ -58,7 +59,8 @@ int main(int argc, char *argv[]) {
       continue;
     }
     
-    while(1){
+    int exitFile = 0;
+    while(!exitFile){
       switch (get_next(fd)) {
         case CMD_WRITE:
           num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
@@ -146,10 +148,12 @@ int main(int argc, char *argv[]) {
 
         case EOC:
           close(fd);
-          closedir(dir);
-          kvs_terminate();
-          return 0;
+          exitFile = 1;
+          break;
       }
     }
   }
+  kvs_terminate();
+  closedir(dir);
+  return 0;
 }
