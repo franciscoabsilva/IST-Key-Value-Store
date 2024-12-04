@@ -48,7 +48,6 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
 
     if (!strstr(entry->d_name, ".job")) continue; 
-    fprintf(stderr, "Processing file %s\n", entry->d_name);
     char file_path[PATH_MAX];
     snprintf(file_path, sizeof(file_path), "%s/%s", directory_path, entry->d_name);
 
@@ -59,7 +58,8 @@ int main(int argc, char *argv[]) {
       continue;
     }
     
-    int exitFile = 0;
+    // flag to exit the file processing loop
+    int exitFile = 0; 
     while(!exitFile){
       switch (get_next(fd)) {
         case CMD_WRITE:
@@ -153,6 +153,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+  // terminates after processing all files
   kvs_terminate();
   closedir(dir);
   return 0;
