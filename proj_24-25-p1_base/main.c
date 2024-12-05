@@ -47,15 +47,15 @@ int main(int argc, char *argv[]) {
     printf("> ");
     fflush(stdout);
 
-    // check to see if the file name is a .job
-    // ???? TODO verificar bem
-    if (!strstr(entry->d_name, ".job")) continue; 
+    size_t len = strlen(entry->d_name);
+    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job")) continue;
 
     // get the full path of the file
     char file_path[PATH_MAX];
     snprintf(file_path, sizeof(file_path), "%s/%s", directory_path, entry->d_name);
 
     int fd = open(file_path, O_RDONLY);
+    
     if (fd == -1){
       fprintf(stderr, "Failed to open file\n");
       continue;
