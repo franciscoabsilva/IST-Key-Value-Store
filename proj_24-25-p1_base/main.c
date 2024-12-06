@@ -60,7 +60,21 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Failed to open file\n");
       continue;
     }
+    
+    // get the name of the output file (len + null character)
+    char outName[len + 1];
+    // copy the name and write the .out extension
+    strncpy(outName, entry->d_name, len - 4);
+    strcpy(outName + (len - 4), ".out");
 
+    char out_path[PATH_MAX];
+    snprintf(out_path, sizeof(out_path), "%s/%s", directory_path, outName);
+    
+    int fdOut = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fdOut == -1) {
+      fprintf(stderr, "Failed to open output file: %s\n", out_path);
+    continue;
+}
     // flag to exit the file processing loop
     int exitFile = 0; 
     while(!exitFile){
@@ -86,7 +100,7 @@ int main(int argc, char *argv[]) {
             continue;
           }
 
-          if (kvs_read(num_pairs, keys)) {
+          if (kvs_read(num_pairs, keys, fdOut)) {
             fprintf(stderr, "Failed to read pair\n");
           }
           break;
@@ -106,7 +120,7 @@ int main(int argc, char *argv[]) {
 
         case CMD_SHOW:
 
-          kvs_show();
+          kvs_show(fdOut);
           break;
 
         case CMD_WAIT:
@@ -151,6 +165,7 @@ int main(int argc, char *argv[]) {
 
         case EOC:
           close(fd);
+          close(fdOut);
           exitFile = 1;
           break;
       }
