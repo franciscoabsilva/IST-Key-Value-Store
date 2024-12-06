@@ -15,7 +15,10 @@
 int main(int argc, char *argv[]) {
 
   // check if the correct number of arguments was passed
-  if(argc != 3) return 1;
+  if(argc != 3) {
+    fprintf(stderr, "Wrong number of arguments\n");
+    return 1;
+  }
   
   const char *directory_path = argv[1];
   //int backup_counter = atoi(argv[2]);
@@ -24,9 +27,7 @@ int main(int argc, char *argv[]) {
   struct dirent *entry;
   
   // check if the directory exists
-  // ???? TODO ver se o dir é null se nao existir ou se isto é inutil
   if(dir == NULL){
-    closedir(dir);
     fprintf(stderr, "Failed to open directory\n");
     return 1;
   }
@@ -56,7 +57,7 @@ int main(int argc, char *argv[]) {
 
     int fd = open(file_path, O_RDONLY);
     
-    if (fd == -1){
+    if (fd < 0){
       fprintf(stderr, "Failed to open file\n");
       continue;
     }
@@ -130,7 +131,7 @@ int main(int argc, char *argv[]) {
           }
 
           if (delay > 0) {
-            printf("Waiting...\n");
+            write(fdOut, "Waiting...\n", 11);
             kvs_wait(delay);
           }
           break;
