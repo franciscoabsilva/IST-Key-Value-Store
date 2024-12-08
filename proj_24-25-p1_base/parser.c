@@ -113,7 +113,6 @@ enum Command get_next(int fd) {
         cleanup(fd);
         return CMD_INVALID;
       }
-
       return CMD_DELETE;
 
     case 'S':

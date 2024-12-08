@@ -1,3 +1,4 @@
 *.o
 kvs
 test/
+../tests-public/

@@ -10,7 +10,12 @@
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
-#define PATH_MAX 4096 //???? provalvemente nao é preciso
+#include "pthread.h"
+#include <semaphore.h>
+#define PATH_MAX 4096
+
+sem_t sem;
+
 
 int main(int argc, char *argv[]) {
 
@@ -19,10 +24,16 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Wrong number of arguments\n");
     return 1;
   }
-  
   const char *directory_path = argv[1];
-  //int backup_counter = atoi(argv[2]);
 
+  unsigned int maxBackup = (unsigned int)strtoul(argv[2], NULL, 10);
+  
+  // initialize semaphore
+  if (sem_init(&sem, 0, maxBackup) != 0) {
+    perror("Erro ao inicializar o semáforo");
+    exit(1);
+  }
+ 
   DIR *dir = opendir(directory_path);
   struct dirent *entry;
   
@@ -71,11 +82,14 @@ int main(int argc, char *argv[]) {
     char out_path[PATH_MAX];
     snprintf(out_path, sizeof(out_path), "%s/%s", directory_path, outName);
     
+    // opens or creates the output file
     int fdOut = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fdOut == -1) {
       fprintf(stderr, "Failed to open output file: %s\n", out_path);
     continue;
-}
+    }
+    int totalBck = 0;
+  
     // flag to exit the file processing loop
     int exitFile = 0; 
     while(!exitFile){
@@ -113,14 +127,12 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
-
-          if (kvs_delete(num_pairs, keys)) {
+          if (kvs_delete(num_pairs, keys, fdOut)) {
             fprintf(stderr, "Failed to delete pair\n");
           }
           break;
 
         case CMD_SHOW:
-
           kvs_show(fdOut);
           break;
 
@@ -137,10 +149,32 @@ int main(int argc, char *argv[]) {
           break;
 
         case CMD_BACKUP:
+          pid_t pid = fork();
 
-          if (kvs_backup()) {
-            fprintf(stderr, "Failed to perform backup.\n");
+          if(pid < 0){
+            fprintf(stderr, "Failed to create backup\n");
           }
+
+          // child process
+          else if(pid == 0){
+            // ver se o backup cenas
+            sem_wait(&sem);
+            
+            int fdBck = open("backup", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (kvs_backup(fdBck)) {  
+              fprintf(stderr, "Failed to perform backup.\n");
+            }
+            sem_post(&sem);
+            exit(0);
+          }
+
+          // father process
+          else{
+            totalBck++;           
+          }
+
+
+          
           break;
 
         case CMD_INVALID:
