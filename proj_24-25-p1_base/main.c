@@ -16,7 +16,6 @@
 
 sem_t sem;
 
-
 int main(int argc, char *argv[]) {
 
   // check if the correct number of arguments was passed
@@ -27,7 +26,7 @@ int main(int argc, char *argv[]) {
   const char *directory_path = argv[1];
 
   unsigned int maxBackup = (unsigned int)strtoul(argv[2], NULL, 10);
-  
+
   // initialize semaphore
   if (sem_init(&sem, 0, maxBackup) != 0) {
     perror("Erro ao inicializar o semáforo");
@@ -157,10 +156,16 @@ int main(int argc, char *argv[]) {
 
           // child process
           else if(pid == 0){
-            // ver se o backup cenas
+
             sem_wait(&sem);
-            
-            int fdBck = open("backup", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+            char bckName[len + 1000]; // METI MAIS 1000 PORQUE AQUI CABE TUDO AQUILO QUE NOS APETECER, MAS VER SE ARRANJAMOS ALGO MELHOR
+            snprintf(bckName, sizeof(bckName), "%.*s-%d.bck", (int)(len - 4), entry->d_name, totalBck + 1);
+
+            char bck_path[PATH_MAX];
+            snprintf(bck_path, sizeof(bck_path), "%s/%s", directory_path, bckName);
+
+            int fdBck = open(bck_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (kvs_backup(fdBck)) {  
               fprintf(stderr, "Failed to perform backup.\n");
             }
@@ -172,7 +177,6 @@ int main(int argc, char *argv[]) {
           else{
             totalBck++;           
           }
-
 
           
           break;

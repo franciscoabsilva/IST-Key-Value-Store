@@ -117,6 +117,10 @@ int kvs_backup(int fdBck) {
     return 1;
   }
 
+  kvs_show(fdBck);
+
+  
+
   //inserir aqui codigo util :)
   close(fdBck);
   return 0;
