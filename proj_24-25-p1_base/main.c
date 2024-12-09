@@ -19,16 +19,16 @@ sem_t sem;
 int main(int argc, char *argv[]) {
 
   // check if the correct number of arguments was passed
-  if(argc != 3) {
+  if(argc != 4) {
     fprintf(stderr, "Wrong number of arguments\n");
     return 1;
   }
   const char *directory_path = argv[1];
-
-  unsigned int maxBackup = (unsigned int)strtoul(argv[2], NULL, 10);
+  unsigned int MAX_BACKUPS = (unsigned int)strtoul(argv[2], NULL, 10);
+  //unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
   // initialize semaphore
-  if (sem_init(&sem, 0, maxBackup) != 0) {
+  if (sem_init(&sem, 0, MAX_BACKUPS) != 0) {
     perror("Erro ao inicializar o semáforo");
     exit(1);
   }
@@ -55,9 +55,6 @@ int main(int argc, char *argv[]) {
     unsigned int delay;
     size_t num_pairs;
 
-    printf("> ");
-    fflush(stdout);
-
     size_t len = strlen(entry->d_name);
     if (len < 4 || strcmp(entry->d_name + (len - 4), ".job")) continue;
 
@@ -78,16 +75,16 @@ int main(int argc, char *argv[]) {
     strncpy(outName, entry->d_name, len - 4);
     strcpy(outName + (len - 4), ".out");
 
-    char out_path[PATH_MAX];
-    snprintf(out_path, sizeof(out_path), "%s/%s", directory_path, outName);
+    char outPath[PATH_MAX];
+    snprintf(outPath, sizeof(outPath), "%s/%s", directory_path, outName);
     
     // opens or creates the output file
-    int fdOut = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int fdOut = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fdOut == -1) {
-      fprintf(stderr, "Failed to open output file: %s\n", out_path);
+      fprintf(stderr, "Failed to open output file: %s\n", outPath);
     continue;
     }
-    int totalBck = 0;
+    unsigned int totalBck = 1;
   
     // flag to exit the file processing loop
     int exitFile = 0; 
@@ -156,13 +153,11 @@ int main(int argc, char *argv[]) {
 
           // child process
           else if(pid == 0){
-
             sem_wait(&sem);
-
-            char bckName[len + 1000]; // METI MAIS 1000 PORQUE AQUI CABE TUDO AQUILO QUE NOS APETECER, MAS VER SE ARRANJAMOS ALGO MELHOR
-            snprintf(bckName, sizeof(bckName), "%.*s-%d.bck", (int)(len - 4), entry->d_name, totalBck + 1);
-
+            char bckName[len + totalBck + 5]; // METI MAIS 1000 PORQUE AQUI CABE TUDO AQUILO QUE NOS APETECER, MAS VER SE ARRANJAMOS ALGO MELHOR
+            snprintf(bckName, sizeof(bckName), "%.*s-%d.bck", (int)(len - 4), entry->d_name, totalBck);
             char bck_path[PATH_MAX];
+
             snprintf(bck_path, sizeof(bck_path), "%s/%s", directory_path, bckName);
 
             int fdBck = open(bck_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
