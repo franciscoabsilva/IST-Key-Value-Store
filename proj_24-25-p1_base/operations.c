@@ -41,25 +41,41 @@ int kvs_terminate() {
   return 0;
 }
 
+int compare_pairs(const void *a, const void *b) {
+    const KeyValuePair *pair1 = (const KeyValuePair *)a;
+    const KeyValuePair *pair2 = (const KeyValuePair *)b;
+    return strcmp(pair1->key, pair2->key); // Sort by keys alphabetically
+}
+
 int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE]) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
 
+  char pairs[num_pairs][2][MAX_STRING_SIZE];
   for (size_t i = 0; i < num_pairs; i++) {
-    if (write_pair(kvs_table, keys[i], values[i]) != 0) {
-      fprintf(stderr, "Failed to write keypair (%s,%s)\n", keys[i], values[i]);
-    }
+      strcpy(pairs[i][0], keys[i]);
+      strcpy(pairs[i][1], values[i]);
+  }
+
+  qsort(pairs, num_pairs, sizeof(pairs[0]), compare_pairs);
+
+
+  // Write the sorted pairs
+  for (size_t i = 0; i < num_pairs; i++) {
+      if (write_pair(kvs_table, pairs[i][0], pairs[i][1]) != 0) {
+          fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0], pairs[i][1]);
+      }
   }
 
   return 0;
 }
 
-int compare_pairs(const void *a, const void *b) {
-    const KeyValuePair *pair1 = (const KeyValuePair *)a;
-    const KeyValuePair *pair2 = (const KeyValuePair *)b;
-    return strcmp(pair1->key, pair2->key); // Sort by keys alphabetically
+int compare_keys(const void *a, const void *b) {
+    const char *key1 = (const char *)a;
+    const char *key2 = (const char *)b;
+    return strcmp(key1, key2);
 }
 
 int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
@@ -67,6 +83,9 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
+
+  qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
+
   write(fdOut, "[", 1);
   for (size_t i = 0; i < num_pairs; i++) {
     char buffer[MAX_WRITE_SIZE];

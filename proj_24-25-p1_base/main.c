@@ -56,11 +56,12 @@ int main(int argc, char *argv[]) {
     }
   
   // get the name of the output file (len + null character)
-  char outPath[PATH_MAX];
+  char basePath[PATH_MAX];
   // copy the name and write the .out extension
-  // FIX ME ISTO ESTA A DAR .JO EM VEZ DE .OUT
-  strncpy(outPath, filePath, strlen(filePath) - 4);
-  snprintf(outPath, sizeof(outPath), "%s.out", filePath); 
+  strncpy(basePath, filePath, strlen(filePath) - 4);  // Copia apenas o nome base
+  
+  char outPath[PATH_MAX];
+  snprintf(outPath, sizeof(outPath)+4, "%s.out", basePath); 
   // opens or creates the output file
   int fdOut = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fdOut == -1) {
