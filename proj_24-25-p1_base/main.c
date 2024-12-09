@@ -11,10 +11,9 @@
 #include "parser.h"
 #include "operations.h"
 #include "pthread.h"
-#include <semaphore.h>
-#define PATH_MAX 4096
+#include "sys/wait.h"
 
-sem_t sem;
+#define PATH_MAX 4096
 
 int main(int argc, char *argv[]) {
 
@@ -24,14 +23,10 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   const char *directory_path = argv[1];
-  unsigned int MAX_BACKUPS = (unsigned int)strtoul(argv[2], NULL, 10);
+  unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   //unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
-  // initialize semaphore
-  if (sem_init(&sem, 0, MAX_BACKUPS) != 0) {
-    perror("Erro ao inicializar o semáforo");
-    exit(1);
-  }
+ 
  
   DIR *dir = opendir(directory_path);
   struct dirent *entry;
@@ -145,6 +140,16 @@ int main(int argc, char *argv[]) {
           break;
 
         case CMD_BACKUP:
+          if(backupCounter <= 0){
+            pid_t terminated_pid = wait(NULL); // wait for a child process to terminate
+            if (terminated_pid == -1) {
+              fprintf(stderr, "Failed to wait for child process\n");
+            }
+            else{
+              backupCounter++;
+            }
+          }
+
           pid_t pid = fork();
 
           if(pid < 0){
@@ -153,27 +158,35 @@ int main(int argc, char *argv[]) {
 
           // child process
           else if(pid == 0){
-            sem_wait(&sem);
+            // create file name for backup
             char bckName[len + totalBck + 5]; // METI MAIS 1000 PORQUE AQUI CABE TUDO AQUILO QUE NOS APETECER, MAS VER SE ARRANJAMOS ALGO MELHOR
             snprintf(bckName, sizeof(bckName), "%.*s-%d.bck", (int)(len - 4), entry->d_name, totalBck);
-            char bck_path[PATH_MAX];
 
+            // creat file path for backup
+            char bck_path[PATH_MAX];
             snprintf(bck_path, sizeof(bck_path), "%s/%s", directory_path, bckName);
 
+            // open backup file
             int fdBck = open(bck_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if(fdBck == -1){
+              fprintf(stderr, "Failed to open backup file\n");
+              exit(1);
+            }
+
+            // perform kvs backup
             if (kvs_backup(fdBck)) {  
               fprintf(stderr, "Failed to perform backup.\n");
             }
-            sem_post(&sem);
+
+            // terminate child
             exit(0);
           }
 
           // father process
           else{
-            totalBck++;           
+            backupCounter--;
+            totalBck++;       
           }
-
-          
           break;
 
         case CMD_INVALID:
@@ -206,6 +219,7 @@ int main(int argc, char *argv[]) {
     }
   }
   // terminates after processing all files
+  while(wait(NULL) > 0);
   kvs_terminate();
   closedir(dir);
   return 0;
