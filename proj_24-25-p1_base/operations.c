@@ -8,6 +8,10 @@
 #include "constants.h"
 
 static struct HashTable* kvs_table = NULL;
+typedef struct {
+    char key[MAX_STRING_SIZE];
+    char value[MAX_STRING_SIZE];
+} KeyValuePair;
 
 
 /// Calculates a timespec from a delay in milliseconds.
@@ -52,14 +56,19 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
   return 0;
 }
 
+int compare_pairs(const void *a, const void *b) {
+    const KeyValuePair *pair1 = (const KeyValuePair *)a;
+    const KeyValuePair *pair2 = (const KeyValuePair *)b;
+    return strcmp(pair1->key, pair2->key); // Sort by keys alphabetically
+}
+
 int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-
-    write(fdOut, "[", 1);
-    for (size_t i = 0; i < num_pairs; i++) {
+  write(fdOut, "[", 1);
+  for (size_t i = 0; i < num_pairs; i++) {
     char buffer[MAX_WRITE_SIZE];
     char* result = read_pair(kvs_table, keys[i]);
     if (result == NULL) {
