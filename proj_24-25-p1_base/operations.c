@@ -150,7 +150,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
 
   // Unlock all
   unlock_list(indexList);
-  pthread_rwlock_rdlock(&kvs_table->globalLock);
+  pthread_rwlock_unlock(&kvs_table->globalLock);
   return 0;
 }
 
@@ -189,6 +189,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
 }
 
 void kvs_show(int fdOut) {
+  pthread_rwlock_wrlock(&kvs_table->globalLock);
   char buffer[MAX_WRITE_SIZE];
   for (int i = 0; i < TABLE_SIZE; i++) {
     KeyNode *keyNode = kvs_table->table[i];
@@ -198,6 +199,7 @@ void kvs_show(int fdOut) {
       keyNode = keyNode->next; // Move to the next node
     }
   }
+  pthread_rwlock_unlock(&kvs_table->globalLock);
 }
 
 int kvs_backup(int fdBck) {

@@ -38,7 +38,6 @@ struct HashTable* create_hash_table() {
 
 int write_pair(HashTable *ht, const char *key, const char *value) {
     int index = hash(key);
-    // lock the list with this index
     KeyNode *keyNode = ht->table[index];
 
     // Search for the key node
