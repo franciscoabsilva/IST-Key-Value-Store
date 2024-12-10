@@ -5,13 +5,14 @@
 #include <string.h>
 
 #include <dirent.h>
-#include <fcntl.h> //???? soa bue suspeito, é mm?
+#include <fcntl.h> // isto significa file control option, deve ser do fd
+#include <pthread.h> // IMPORTEI ESTES DOIS AQUI COM <> EM VEZ DE ""
+#include <sys/wait.h>
+
 
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
-#include "pthread.h"
-#include "sys/wait.h"
 
 #define PATH_MAX 4096
 
@@ -25,6 +26,8 @@ int main(int argc, char *argv[]) {
   const char *directory_path = argv[1];
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   //unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
+
+  pthread_mutex_t backupCounterMutex = PTHREAD_MUTEX_INITIALIZER;
 
   DIR *dir = opendir(directory_path);
   struct dirent *entry;
@@ -129,6 +132,9 @@ int main(int argc, char *argv[]) {
           break;
 
         case CMD_BACKUP:
+
+          pthread_mutex_lock(&backupCounterMutex);
+          
           if(backupCounter <= 0){
             pid_t terminated_pid = wait(NULL); // wait for a child process to terminate
             if (terminated_pid == -1) {
@@ -147,7 +153,7 @@ int main(int argc, char *argv[]) {
 
           // child process
           else if(pid == 0){
-
+            pthread_mutex_unlock(&backupCounterMutex);
             // create file path for backup
             char bckPath[PATH_MAX];
             snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck", (int)(strlen(filePath) - 4), filePath, totalBck);
@@ -163,7 +169,7 @@ int main(int argc, char *argv[]) {
             if (kvs_backup(fdBck)) {  
               fprintf(stderr, "Failed to perform backup.\n");
             }
-
+  
             // terminate child
             exit(0);
           }
@@ -171,7 +177,8 @@ int main(int argc, char *argv[]) {
           // father process
           else{
             backupCounter--;
-            totalBck++;       
+            totalBck++;
+            pthread_mutex_unlock(&backupCounterMutex);       
           }
           break;
 
