@@ -1,4 +1,6 @@
 *.o
+*.out
+*.bck
 kvs
 test/
 ../tests-public/
