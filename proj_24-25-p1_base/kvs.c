@@ -39,8 +39,6 @@ struct HashTable* create_hash_table() {
 int write_pair(HashTable *ht, const char *key, const char *value) {
     int index = hash(key);
     // lock the list with this index
-    pthread_rwlock_rdlock(&ht->globalLock);
-    pthread_rwlock_wrlock(&ht->bucketLocks[index]);
     KeyNode *keyNode = ht->table[index];
 
     // Search for the key node
@@ -49,8 +47,6 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
         if (strcmp(keyNode->key, key) == 0) {
             free(keyNode->value);
             keyNode->value = strdup(value);
-            pthread_rwlock_unlock(&ht->bucketLocks[index]);
-            pthread_rwlock_unlock(&ht->globalLock);
             return 0;
         }
         keyNode = keyNode->next; // Move to the next node
@@ -62,36 +58,26 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
     keyNode->value = strdup(value); // Allocate memory for the value
     keyNode->next = ht->table[index]; // Link to existing nodes
     ht->table[index] = keyNode; // Place new key node at the start of the list
-    pthread_rwlock_unlock(&ht->bucketLocks[index]);
-    pthread_rwlock_unlock(&ht->globalLock);
     return 0;
 }
 
 char* read_pair(HashTable *ht, const char *key) {
     int index = hash(key);
-    pthread_rwlock_rdlock(&ht->globalLock);
-    pthread_rwlock_rdlock(&ht->bucketLocks[index]);
     KeyNode *keyNode = ht->table[index];
     char* value;
 
     while (keyNode != NULL) {
         if (strcmp(keyNode->key, key) == 0) {
             value = strdup(keyNode->value);
-            pthread_rwlock_unlock(&ht->bucketLocks[index]);
-            pthread_rwlock_unlock(&ht->globalLock);
             return value; // Return copy of the value if found
         }
         keyNode = keyNode->next; // Move to the next node
     }
-    pthread_rwlock_unlock(&ht->bucketLocks[index]);
-    pthread_rwlock_unlock(&ht->globalLock);
     return NULL; // Key not found
 }
 
 int delete_pair(HashTable *ht, const char *key) {
     int index = hash(key);
-    pthread_rwlock_rdlock(&ht->globalLock);
-    pthread_rwlock_wrlock(&ht->bucketLocks[index]);
     KeyNode *keyNode = ht->table[index];
     KeyNode *prevNode = NULL;
 
@@ -110,8 +96,6 @@ int delete_pair(HashTable *ht, const char *key) {
             free(keyNode->key);
             free(keyNode->value);
             free(keyNode); // Free the key node itself
-            pthread_rwlock_unlock(&ht->bucketLocks[index]);
-            pthread_rwlock_unlock(&ht->globalLock);
             return 0; // Exit the function
         }
         prevNode = keyNode; // Move prevNode to current node

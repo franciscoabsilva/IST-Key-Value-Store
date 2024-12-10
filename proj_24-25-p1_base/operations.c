@@ -46,26 +46,73 @@ int compare_pairs(const void *a, const void *b) {
     return strcmp(pair1->key, pair2->key); // Sort by keys alphabetically
 }
 
+void lock_write_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
+  for (size_t i = 0; i < num_pairs; i++) {
+    int index = hash(keys[i]);
+
+    // If that index still hasn't been locked
+    if(indexList[index] == 0){
+      pthread_rwlock_wrlock(&kvs_table->bucketLocks[index]);
+      indexList[index] = 1;
+    }
+  }
+}
+
+void lock_read_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
+  for (size_t i = 0; i < num_pairs; i++) {
+    int index = hash(keys[i]);
+
+    // If that index still hasn't been locked
+    if(indexList[index] == 0){
+      pthread_rwlock_rdlock(&kvs_table->bucketLocks[index]);
+      indexList[index] = 1;
+    }
+  }
+}
+
+void unlock_list(int indexList[]){
+  for(int i = 0; i < TABLE_SIZE; i++){
+    if(indexList[i] == 1){
+      pthread_rwlock_unlock(&kvs_table->bucketLocks[i]);
+      indexList[i] = 0;
+    }
+  }
+}
+
+
 int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE]) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
 
+  // Sort the pairs alphabetically
   char pairs[num_pairs][2][MAX_STRING_SIZE];
   for (size_t i = 0; i < num_pairs; i++) {
       strcpy(pairs[i][0], keys[i]);
       strcpy(pairs[i][1], values[i]);
   }
   qsort(pairs, num_pairs, sizeof(pairs[0]), compare_pairs);
+  char sortedKeys[num_pairs][MAX_STRING_SIZE];
+  for (size_t i = 0; i < num_pairs; i++){
+    strcpy(sortedKeys[i], pairs[i][0]);
+  }  
+
+  // Lock all
+  int indexList[TABLE_SIZE] = {0};
+  pthread_rwlock_rdlock(&kvs_table->globalLock);
+  lock_write_list(num_pairs, sortedKeys, indexList);
 
   // Write the sorted pairs
-  pthread_rwlock_rdlock(&kvs_table->globalLock);
   for (size_t i = 0; i < num_pairs; i++) {
       if (write_pair(kvs_table, pairs[i][0], pairs[i][1]) != 0) {
           fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0], pairs[i][1]);
       }
   }
+
+  // Unlock all
+  unlock_list(indexList);
+  pthread_rwlock_unlock(&kvs_table->globalLock);
   return 0;
 }
 
@@ -80,8 +127,12 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-
   qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
+
+  // Lock all
+  int indexList[TABLE_SIZE] = {0};
+  pthread_rwlock_rdlock(&kvs_table->globalLock);
+  lock_read_list(num_pairs, keys, indexList);
 
   write(fdOut, "[", 1);
   for (size_t i = 0; i < num_pairs; i++) {
@@ -96,6 +147,10 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     free(result);
   }
   write(fdOut, "]\n", 2);
+
+  // Unlock all
+  unlock_list(indexList);
+  pthread_rwlock_rdlock(&kvs_table->globalLock);
   return 0;
 }
 
@@ -104,8 +159,14 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-  int aux = 0;
+  qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
 
+  // Lock all
+  int indexList[TABLE_SIZE] = {0};
+  pthread_rwlock_rdlock(&kvs_table->globalLock);
+  lock_write_list(num_pairs, keys, indexList);
+
+  int aux = 0;
   for (size_t i = 0; i < num_pairs; i++) {
     if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
@@ -120,6 +181,10 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   if (aux) {
     write(fdOut, "]\n", 2);
   }
+
+  // Unlock all
+  unlock_list(indexList);
+  pthread_rwlock_unlock(&kvs_table->globalLock);
   return 0;
 }
 

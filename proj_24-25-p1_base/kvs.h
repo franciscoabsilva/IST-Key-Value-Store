@@ -22,6 +22,13 @@ typedef struct HashTable {
 /// @return Newly created hash table, NULL on failure
 struct HashTable *create_hash_table();
 
+
+/// Hash function based on key initial.
+/// @param key Lowercase alphabetical string.
+/// @return hash.
+/// NOTE: This is not an ideal hash function, but is useful for test purposes of the project
+int hash(const char *key);
+
 /// Appends a new key value pair to the hash table.
 /// @param ht Hash table to be modified.
 /// @param key Key of the pair to be written.
