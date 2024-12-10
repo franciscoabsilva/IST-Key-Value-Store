@@ -3,6 +3,9 @@
 
 #include <stdlib.h>
 #include <ctype.h>
+#include <pthread.h>
+#include <stdio.h>
+
 
 // Hash function based on key initial.
 // @param key Lowercase alphabetical string.
@@ -20,23 +23,34 @@ int hash(const char *key) {
 
 
 struct HashTable* create_hash_table() {
-  HashTable *ht = malloc(sizeof(HashTable));
-  if (!ht) return NULL;
-  for (int i = 0; i < TABLE_SIZE; i++) {
-      ht->table[i] = NULL;
-  }
-  return ht;
+    HashTable *ht = malloc(sizeof(HashTable));
+    if (!ht) return NULL;
+    ht->bucketLocks = malloc(TABLE_SIZE * sizeof(pthread_rwlock_t));
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        ht->table[i] = NULL;
+        pthread_rwlock_init(&ht->bucketLocks[i], NULL);
+    }
+    if(pthread_rwlock_init(&ht->globalLock, NULL)){
+        fprintf(stderr, "Error: Initializing global lock.\n");
+    }   
+    return ht;
 }
 
 int write_pair(HashTable *ht, const char *key, const char *value) {
     int index = hash(key);
+    // lock the list with this index
+    pthread_rwlock_rdlock(&ht->globalLock);
+    pthread_rwlock_wrlock(&ht->bucketLocks[index]);
     KeyNode *keyNode = ht->table[index];
 
     // Search for the key node
     while (keyNode != NULL) {
+        // Key node found; update the value
         if (strcmp(keyNode->key, key) == 0) {
             free(keyNode->value);
             keyNode->value = strdup(value);
+            pthread_rwlock_unlock(&ht->bucketLocks[index]);
+            pthread_rwlock_unlock(&ht->globalLock);
             return 0;
         }
         keyNode = keyNode->next; // Move to the next node
@@ -48,26 +62,36 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
     keyNode->value = strdup(value); // Allocate memory for the value
     keyNode->next = ht->table[index]; // Link to existing nodes
     ht->table[index] = keyNode; // Place new key node at the start of the list
+    pthread_rwlock_unlock(&ht->bucketLocks[index]);
+    pthread_rwlock_unlock(&ht->globalLock);
     return 0;
 }
 
 char* read_pair(HashTable *ht, const char *key) {
     int index = hash(key);
+    pthread_rwlock_rdlock(&ht->globalLock);
+    pthread_rwlock_rdlock(&ht->bucketLocks[index]);
     KeyNode *keyNode = ht->table[index];
     char* value;
 
     while (keyNode != NULL) {
         if (strcmp(keyNode->key, key) == 0) {
             value = strdup(keyNode->value);
+            pthread_rwlock_unlock(&ht->bucketLocks[index]);
+            pthread_rwlock_unlock(&ht->globalLock);
             return value; // Return copy of the value if found
         }
         keyNode = keyNode->next; // Move to the next node
     }
+    pthread_rwlock_unlock(&ht->bucketLocks[index]);
+    pthread_rwlock_unlock(&ht->globalLock);
     return NULL; // Key not found
 }
 
 int delete_pair(HashTable *ht, const char *key) {
     int index = hash(key);
+    pthread_rwlock_rdlock(&ht->globalLock);
+    pthread_rwlock_wrlock(&ht->bucketLocks[index]);
     KeyNode *keyNode = ht->table[index];
     KeyNode *prevNode = NULL;
 
@@ -86,6 +110,8 @@ int delete_pair(HashTable *ht, const char *key) {
             free(keyNode->key);
             free(keyNode->value);
             free(keyNode); // Free the key node itself
+            pthread_rwlock_unlock(&ht->bucketLocks[index]);
+            pthread_rwlock_unlock(&ht->globalLock);
             return 0; // Exit the function
         }
         prevNode = keyNode; // Move prevNode to current node
@@ -105,6 +131,9 @@ void free_table(HashTable *ht) {
             free(temp->value);
             free(temp);
         }
+        pthread_rwlock_destroy(&ht->bucketLocks[i]);
     }
+    pthread_rwlock_destroy(&ht->globalLock);
+    free(ht->bucketLocks);
     free(ht);
 }

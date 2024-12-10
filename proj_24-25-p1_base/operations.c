@@ -36,7 +36,6 @@ int kvs_terminate() {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-
   free_table(kvs_table);
   return 0;
 }
@@ -58,17 +57,15 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
       strcpy(pairs[i][0], keys[i]);
       strcpy(pairs[i][1], values[i]);
   }
-
   qsort(pairs, num_pairs, sizeof(pairs[0]), compare_pairs);
 
-
   // Write the sorted pairs
+  pthread_rwlock_rdlock(&kvs_table->globalLock);
   for (size_t i = 0; i < num_pairs; i++) {
       if (write_pair(kvs_table, pairs[i][0], pairs[i][1]) != 0) {
           fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0], pairs[i][1]);
       }
   }
-
   return 0;
 }
 
