@@ -16,6 +16,7 @@
 
 #define PATH_MAX 4096
 pthread_mutex_t backupCounterMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
   DIR *dir;
@@ -31,16 +32,17 @@ void *process_thread(void *arg){
   unsigned int *backupCounter = arg_struct->backupCounter;
 
   struct dirent *entry;
-
+  pthread_mutex_lock(&threadMutex);
   while ((entry = readdir(dir)) != NULL) {
 
     // check if the file has the .job extension
     size_t len = strlen(entry->d_name);
-    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job")) continue;
+    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job"))continue;
 
     // get the full path of the file
     char filePath[PATH_MAX];
     snprintf(filePath, sizeof(filePath), "%s/%s", directory_path, entry->d_name);
+    pthread_mutex_unlock(&threadMutex);
 
     // open the file
     int fd = open(filePath, O_RDONLY);
@@ -167,7 +169,6 @@ void *process_thread(void *arg){
             if (kvs_backup(fdBck)) {  
               fprintf(stderr, "Failed to perform backup.\n");
             }
-
             // terminate child
             exit(0);
           }
@@ -204,9 +205,12 @@ void *process_thread(void *arg){
           close(fd);
           close(fdOut);
           eocFlag = 1;
+          pthread_mutex_lock(&threadMutex);
+          break;
       }
     }
   }
+  pthread_mutex_unlock(&threadMutex);
   return NULL;
 }
 
@@ -223,7 +227,7 @@ int main(int argc, char *argv[]) {
   // parse input arguments  
   const char *directory_path = argv[1];
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
-  //unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
+  unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
   DIR *dir = opendir(directory_path);
   // check if the directory exists
@@ -244,9 +248,15 @@ int main(int argc, char *argv[]) {
   args->directory_path = (char *)directory_path;
   args->backupCounter = &backupCounter;
 
-  process_thread((void *)args);
-  
+  pthread_t thread[MAX_THREADS];
+  for(unsigned int i = 0; i < MAX_THREADS; i++){
+    pthread_create(&thread[i], NULL, process_thread, (void *)args);
+  }
+  for(unsigned int i = 0; i < MAX_THREADS; i++){
+    pthread_join(thread[i], NULL);
+  }
   free(args);
+
   // terminates after processing all files
   while(wait(NULL) > 0);
   kvs_terminate();
