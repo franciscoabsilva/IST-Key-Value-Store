@@ -18,21 +18,20 @@
 pthread_mutex_t backupCounterMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
 
-typedef struct {
+struct ThreadArgs {
   DIR *dir;
   char *directory_path;
   unsigned int *backupCounter;
-}ThreadArgs;
-
+};
+  
 
 void *process_thread(void *arg){
-  ThreadArgs *arg_struct = (ThreadArgs *)arg;
+  struct ThreadArgs *arg_struct = (struct ThreadArgs *)arg;
   DIR *dir = arg_struct->dir;
   char *directory_path = arg_struct->directory_path;
-  unsigned int *backupCounter = arg_struct->backupCounter;
-
-  struct dirent *entry;
+  unsigned int *backupCounter = arg_struct->backupCounter; 
   pthread_mutex_lock(&threadMutex);
+  struct dirent *entry;
   while ((entry = readdir(dir)) != NULL) {
 
     // check if the file has the .job extension
@@ -135,16 +134,21 @@ void *process_thread(void *arg){
 
           pthread_mutex_lock(&backupCounterMutex);
           
-          if((*backupCounter) <= 0){
-            pid_t terminated_pid = wait(NULL); // wait for a child process to terminate
+          // backup limit hasnt been reached yet
+          if((*backupCounter) > 0){
+            (*backupCounter)--;
+          }
+
+          // backup limit has been reached
+          else{
+            // wait for a child process to terminate
+            pid_t terminated_pid = wait(NULL); 
             if (terminated_pid == -1) {
               fprintf(stderr, "Failed to wait for child process\n");
             }
-            else{
-              (*backupCounter)++;
-            }
           }
-
+       
+          pthread_mutex_unlock(&backupCounterMutex);
           pid_t pid = fork();
 
           if(pid < 0){
@@ -153,7 +157,6 @@ void *process_thread(void *arg){
 
           // child process
           else if(pid == 0){
-            pthread_mutex_unlock(&backupCounterMutex);
             // create file path for backup
             char bckPath[PATH_MAX];
             snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck", (int)(strlen(filePath) - 4), filePath, totalBck);
@@ -175,9 +178,7 @@ void *process_thread(void *arg){
 
           // father process
           else{
-            backupCounter--;
             totalBck++;
-            pthread_mutex_unlock(&backupCounterMutex);       
           }
           break;
 
@@ -216,6 +217,7 @@ void *process_thread(void *arg){
 
 
 
+
 int main(int argc, char *argv[]) {
 
   // check if the correct number of arguments was passed
@@ -225,7 +227,7 @@ int main(int argc, char *argv[]) {
   }
 
   // parse input arguments  
-  const char *directory_path = argv[1];
+  char *directory_path = argv[1];
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
@@ -243,19 +245,16 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  ThreadArgs *args = (ThreadArgs *)malloc(sizeof(ThreadArgs));
-  args->dir = dir;
-  args->directory_path = (char *)directory_path;
-  args->backupCounter = &backupCounter;
-
+  struct ThreadArgs args = {dir, directory_path, &backupCounter};
+  
   pthread_t thread[MAX_THREADS];
   for(unsigned int i = 0; i < MAX_THREADS; i++){
-    pthread_create(&thread[i], NULL, process_thread, (void *)args);
+    pthread_create(&thread[i], NULL, process_thread, (void *)&args);
   }
   for(unsigned int i = 0; i < MAX_THREADS; i++){
     pthread_join(thread[i], NULL);
   }
-  free(args);
+  
 
   // terminates after processing all files
   while(wait(NULL) > 0);
