@@ -15,43 +15,34 @@
 #include "operations.h"
 
 #define PATH_MAX 4096
+pthread_mutex_t backupCounterMutex = PTHREAD_MUTEX_INITIALIZER;
 
-int main(int argc, char *argv[]) {
+typedef struct {
+  DIR *dir;
+  char *directory_path;
+  unsigned int *backupCounter;
+}ThreadArgs;
 
-  // check if the correct number of arguments was passed
-  if(argc != 4) {
-    fprintf(stderr, "Wrong number of arguments\n");
-    return 1;
-  }
-  const char *directory_path = argv[1];
-  unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
-  //unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
-  pthread_mutex_t backupCounterMutex = PTHREAD_MUTEX_INITIALIZER;
+void *process_thread(void *arg){
+  ThreadArgs *arg_struct = (ThreadArgs *)arg;
+  DIR *dir = arg_struct->dir;
+  char *directory_path = arg_struct->directory_path;
+  unsigned int *backupCounter = arg_struct->backupCounter;
 
-  DIR *dir = opendir(directory_path);
   struct dirent *entry;
-  
-  // check if the directory exists
-  if(dir == NULL){
-    fprintf(stderr, "Failed to open directory\n");
-    return 1;
-  }
 
-  if (kvs_init()) {
-    closedir(dir);
-    fprintf(stderr, "Failed to initialize KVS\n");
-    return 1;
-  }
+  while ((entry = readdir(dir)) != NULL) {
 
-  void *process_file(void *arg){
-    char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
-    char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
-    unsigned int delay;
-    size_t num_pairs;
+    // check if the file has the .job extension
+    size_t len = strlen(entry->d_name);
+    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job")) continue;
 
-    char *filePath = (char *)arg;
+    // get the full path of the file
+    char filePath[PATH_MAX];
+    snprintf(filePath, sizeof(filePath), "%s/%s", directory_path, entry->d_name);
 
+    // open the file
     int fd = open(filePath, O_RDONLY);
     if (fd < 0){
       fprintf(stderr, "Failed to open file\n");
@@ -73,10 +64,17 @@ int main(int argc, char *argv[]) {
       return NULL;
     }
 
+    char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
+    char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
+    unsigned int delay;
+    size_t num_pairs;
+
     // count the backups already made on this file
     unsigned int totalBck = 1;
 
-    while(1){
+    int eocFlag = 0;
+
+    while(!eocFlag){
       switch (get_next(fd)) {
         case CMD_WRITE:
           num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
@@ -135,13 +133,13 @@ int main(int argc, char *argv[]) {
 
           pthread_mutex_lock(&backupCounterMutex);
           
-          if(backupCounter <= 0){
+          if((*backupCounter) <= 0){
             pid_t terminated_pid = wait(NULL); // wait for a child process to terminate
             if (terminated_pid == -1) {
               fprintf(stderr, "Failed to wait for child process\n");
             }
             else{
-              backupCounter++;
+              (*backupCounter)++;
             }
           }
 
@@ -169,7 +167,7 @@ int main(int argc, char *argv[]) {
             if (kvs_backup(fdBck)) {  
               fprintf(stderr, "Failed to perform backup.\n");
             }
-  
+
             // terminate child
             exit(0);
           }
@@ -205,34 +203,53 @@ int main(int argc, char *argv[]) {
         case EOC:
           close(fd);
           close(fdOut);
-          return NULL;
-        }
+          eocFlag = 1;
       }
     }
-    
+  }
+  return NULL;
+}
 
-  while ((entry = readdir(dir)) != NULL) {
 
-    // check if the file has the .job extension
-    size_t len = strlen(entry->d_name);
-    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job")) continue;
 
-    // get the full path of the file
-    char file_path[PATH_MAX];
-    snprintf(file_path, sizeof(file_path), "%s/%s", directory_path, entry->d_name);
-    process_file((void *)file_path);
-    
-    /*
-    pthread_t thread;
-    if(pthread_create(&thread, NULL, process_file, (void *)file_path)){
-      fprintf(stderr, "Failed to create thread\n");
-    };
-  */
+int main(int argc, char *argv[]) {
 
-    }
-    // terminates after processing all files
-    while(wait(NULL) > 0);
-    kvs_terminate();
+  // check if the correct number of arguments was passed
+  if(argc != 4) {
+    fprintf(stderr, "Wrong number of arguments\n");
+    return 1;
+  }
+
+  // parse input arguments  
+  const char *directory_path = argv[1];
+  unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
+  //unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
+
+  DIR *dir = opendir(directory_path);
+  // check if the directory exists
+  if(dir == NULL){
+    fprintf(stderr, "Failed to open directory\n");
+    return 1;
+  }
+
+  // initialize the key-value store
+  if (kvs_init()) {
     closedir(dir);
-    return 0;
+    fprintf(stderr, "Failed to initialize KVS\n");
+    return 1;
+  }
+
+  ThreadArgs *args = (ThreadArgs *)malloc(sizeof(ThreadArgs));
+  args->dir = dir;
+  args->directory_path = (char *)directory_path;
+  args->backupCounter = &backupCounter;
+
+  process_thread((void *)args);
+  
+  free(args);
+  // terminates after processing all files
+  while(wait(NULL) > 0);
+  kvs_terminate();
+  closedir(dir);
+  return 0;
   }
