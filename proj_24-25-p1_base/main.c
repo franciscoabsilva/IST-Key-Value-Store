@@ -15,22 +15,24 @@
 #include "operations.h"
 
 #define PATH_MAX 4096
-pthread_mutex_t backupCounterMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t threadMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t backupCounterMutex;
+pthread_mutex_t threadMutex;
 
 struct ThreadArgs {
   DIR *dir;
   char *directory_path;
   unsigned int *backupCounter;
 };
-  
+
 
 void *process_thread(void *arg){
   struct ThreadArgs *arg_struct = (struct ThreadArgs *)arg;
   DIR *dir = arg_struct->dir;
   char *directory_path = arg_struct->directory_path;
   unsigned int *backupCounter = arg_struct->backupCounter; 
-  pthread_mutex_lock(&threadMutex);
+  if (pthread_mutex_lock(&threadMutex)) {
+    fprintf(stderr, "Failed to lock mutex\n");
+  }
   struct dirent *entry;
   while ((entry = readdir(dir)) != NULL) {
 
@@ -41,7 +43,9 @@ void *process_thread(void *arg){
     // get the full path of the file
     char filePath[PATH_MAX];
     snprintf(filePath, sizeof(filePath), "%s/%s", directory_path, entry->d_name);
-    pthread_mutex_unlock(&threadMutex);
+    if (pthread_mutex_unlock(&threadMutex)) {
+      fprintf(stderr, "Failed to unlock mutex\n");
+    }
 
     // open the file
     int fd = open(filePath, O_RDONLY);
@@ -115,7 +119,9 @@ void *process_thread(void *arg){
           break;
 
         case CMD_SHOW:
-          kvs_show(fdOut);
+          if (kvs_show(fdOut)) {
+            fprintf(stderr, "Failed to show pairs\n");
+          }
           break;
 
         case CMD_WAIT:
@@ -132,7 +138,9 @@ void *process_thread(void *arg){
 
         case CMD_BACKUP:
 
-          pthread_mutex_lock(&backupCounterMutex);
+          if (pthread_mutex_lock(&backupCounterMutex)) {
+            fprintf(stderr, "Failed to lock mutex\n");
+          } 
           
           // backup limit hasnt been reached yet
           if((*backupCounter) > 0){
@@ -148,7 +156,9 @@ void *process_thread(void *arg){
             }
           }
        
-          pthread_mutex_unlock(&backupCounterMutex);
+          if (pthread_mutex_unlock(&backupCounterMutex)) {
+            fprintf(stderr, "Failed to unlock mutex\n");
+          }
           pid_t pid = fork();
 
           if(pid < 0){
@@ -206,16 +216,18 @@ void *process_thread(void *arg){
           close(fd);
           close(fdOut);
           eocFlag = 1;
-          pthread_mutex_lock(&threadMutex);
+          if (pthread_mutex_lock(&threadMutex)) {
+            fprintf(stderr, "Failed to lock mutex\n");
+          }
           break;
       }
     }
   }
-  pthread_mutex_unlock(&threadMutex);
+  if (pthread_mutex_unlock(&threadMutex)) {
+    fprintf(stderr, "Failed to unlock mutex\n");
+  } 
   return NULL;
 }
-
-
 
 
 int main(int argc, char *argv[]) {
@@ -231,6 +243,7 @@ int main(int argc, char *argv[]) {
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
+
   DIR *dir = opendir(directory_path);
   // check if the directory exists
   if(dir == NULL){
@@ -245,20 +258,29 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  // define mutex
+  pthread_mutex_init(&backupCounterMutex, NULL);
+  pthread_mutex_init(&threadMutex, NULL);
+
   struct ThreadArgs args = {dir, directory_path, &backupCounter};
-  
   pthread_t thread[MAX_THREADS];
   for(unsigned int i = 0; i < MAX_THREADS; i++){
     pthread_create(&thread[i], NULL, process_thread, (void *)&args);
   }
-  for(unsigned int i = 0; i < MAX_THREADS; i++){
-    pthread_join(thread[i], NULL);
-  }
-  
 
   // terminates after processing all files
   while(wait(NULL) > 0);
+  for(unsigned int i = 0; i < MAX_THREADS; i++){
+    pthread_join(thread[i], NULL);
+  }
+
+  if(closedir(dir)){
+    fprintf(stderr, "Failed to close directory\n");
+    return 1;
+  }
+
+  pthread_mutex_destroy(&backupCounterMutex);
+  pthread_mutex_destroy(&threadMutex);
   kvs_terminate();
-  closedir(dir);
   return 0;
   }

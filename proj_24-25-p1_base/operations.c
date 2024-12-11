@@ -46,37 +46,49 @@ int compare_pairs(const void *a, const void *b) {
     return strcmp(pair1->key, pair2->key); // Sort by keys alphabetically
 }
 
-void lock_write_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
+int lock_write_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
   for (size_t i = 0; i < num_pairs; i++) {
     int index = hash(keys[i]);
 
     // If that index still hasn't been locked
     if(indexList[index] == 0){
-      pthread_rwlock_wrlock(&kvs_table->bucketLocks[index]);
+      if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
+        fprintf(stderr, "Failed to lock bucket %d\n", index);
+        return 1;
+      } 
       indexList[index] = 1;
     }
   }
+  return 0;
 }
 
-void lock_read_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
+int lock_read_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
   for (size_t i = 0; i < num_pairs; i++) {
     int index = hash(keys[i]);
 
     // If that index still hasn't been locked
     if(indexList[index] == 0){
-      pthread_rwlock_rdlock(&kvs_table->bucketLocks[index]);
+      if (pthread_rwlock_rdlock(&kvs_table->bucketLocks[index])) {
+        fprintf(stderr, "Failed to lock bucket %d\n", index);
+        return 1;
+      } 
       indexList[index] = 1;
     }
   }
+  return 0;
 }
 
-void unlock_list(int indexList[]){
+int unlock_list(int indexList[]){
   for(int i = 0; i < TABLE_SIZE; i++){
     if(indexList[i] == 1){
-      pthread_rwlock_unlock(&kvs_table->bucketLocks[i]);
+      if (pthread_rwlock_unlock(&kvs_table->bucketLocks[i])) {
+        fprintf(stderr, "Failed to unlock bucket %d\n", i);
+        return 1;
+      }
       indexList[i] = 0;
     }
   }
+  return 0;
 }
 
 
@@ -100,8 +112,14 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
 
   // Lock all
   int indexList[TABLE_SIZE] = {0};
-  pthread_rwlock_rdlock(&kvs_table->globalLock);
-  lock_write_list(num_pairs, sortedKeys, indexList);
+  if (pthread_rwlock_wrlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to lock global mutex\n");
+    return 1;
+  }
+  if(lock_write_list(num_pairs, sortedKeys, indexList)){
+    pthread_rwlock_unlock(&kvs_table->globalLock);
+    return 1;
+  }
 
   // Write the sorted pairs
   for (size_t i = 0; i < num_pairs; i++) {
@@ -111,8 +129,14 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
   }
 
   // Unlock all
-  unlock_list(indexList);
-  pthread_rwlock_unlock(&kvs_table->globalLock);
+  if(unlock_list(indexList)){
+    pthread_rwlock_unlock(&kvs_table->globalLock);
+    return 1;
+  }
+  if (pthread_rwlock_unlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to unlock global mutex\n");
+    return 1;
+  }
   return 0;
 }
 
@@ -131,9 +155,14 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
 
   // Lock all
   int indexList[TABLE_SIZE] = {0};
-  pthread_rwlock_rdlock(&kvs_table->globalLock);
-  lock_read_list(num_pairs, keys, indexList);
-
+  if (pthread_rwlock_rdlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to lock global mutex\n");
+    return 1;
+  }
+  if (lock_read_list(num_pairs, keys, indexList)) {
+    pthread_rwlock_unlock(&kvs_table->globalLock);
+    return 1;
+  }
   write(fdOut, "[", 1);
   for (size_t i = 0; i < num_pairs; i++) {
     char buffer[MAX_WRITE_SIZE];
@@ -149,8 +178,14 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   write(fdOut, "]\n", 2);
 
   // Unlock all
-  unlock_list(indexList);
-  pthread_rwlock_unlock(&kvs_table->globalLock);
+  if (unlock_list(indexList)) {
+    pthread_rwlock_unlock(&kvs_table->globalLock);
+    return 1;
+  }
+  if (pthread_rwlock_unlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to unlock global mutex\n");
+    return 1;
+  } 
   return 0;
 }
 
@@ -163,8 +198,14 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
 
   // Lock all
   int indexList[TABLE_SIZE] = {0};
-  pthread_rwlock_rdlock(&kvs_table->globalLock);
-  lock_write_list(num_pairs, keys, indexList);
+  if (pthread_rwlock_wrlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to lock global mutex\n");
+    return 1;
+  } 
+  if (lock_write_list(num_pairs, keys, indexList)) {
+    pthread_rwlock_unlock(&kvs_table->globalLock);
+    return 1;
+  }
 
   int aux = 0;
   for (size_t i = 0; i < num_pairs; i++) {
@@ -183,13 +224,22 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   }
 
   // Unlock all
-  unlock_list(indexList);
-  pthread_rwlock_unlock(&kvs_table->globalLock);
+  if (unlock_list(indexList)) {
+    pthread_rwlock_unlock(&kvs_table->globalLock);
+    return 1;
+  }
+  if (pthread_rwlock_unlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to unlock global mutex\n");
+    return 1;
+  }
   return 0;
 }
 
-void kvs_show(int fdOut) {
-  pthread_rwlock_wrlock(&kvs_table->globalLock);
+int kvs_show(int fdOut) {
+  if (pthread_rwlock_wrlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to lock global mutex\n");
+    return 1;
+  }
   char buffer[MAX_WRITE_SIZE];
   for (int i = 0; i < TABLE_SIZE; i++) {
     KeyNode *keyNode = kvs_table->table[i];
@@ -199,7 +249,11 @@ void kvs_show(int fdOut) {
       keyNode = keyNode->next; // Move to the next node
     }
   }
-  pthread_rwlock_unlock(&kvs_table->globalLock);
+  if (pthread_rwlock_unlock(&kvs_table->globalLock)) {
+    fprintf(stderr, "Failed to unlock global mutex\n");
+    return 1;
+  } 
+  return 0;
 }
 
 int kvs_backup(int fdBck) {
@@ -208,7 +262,11 @@ int kvs_backup(int fdBck) {
     close(fdBck);
     return 1;
   }
-  kvs_show(fdBck);
+  if (kvs_show(fdBck)) {
+    fprintf(stderr, "Failed to show pairs\n");
+    close(fdBck);
+    return 1;
+  }
   close(fdBck);
   return 0;
 }

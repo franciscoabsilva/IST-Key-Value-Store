@@ -28,10 +28,14 @@ struct HashTable* create_hash_table() {
     ht->bucketLocks = malloc(TABLE_SIZE * sizeof(pthread_rwlock_t));
     for (int i = 0; i < TABLE_SIZE; i++) {
         ht->table[i] = NULL;
-        pthread_rwlock_init(&ht->bucketLocks[i], NULL);
+        if (pthread_rwlock_init(&ht->bucketLocks[i], NULL)){
+            fprintf(stderr, "Error: Initializing bucket lock.\n");
+            return NULL;
+        } 
     }
     if(pthread_rwlock_init(&ht->globalLock, NULL)){
         fprintf(stderr, "Error: Initializing global lock.\n");
+        return NULL;
     }   
     return ht;
 }
@@ -114,9 +118,13 @@ void free_table(HashTable *ht) {
             free(temp->value);
             free(temp);
         }
-        pthread_rwlock_destroy(&ht->bucketLocks[i]);
+        if (pthread_rwlock_destroy(&ht->bucketLocks[i])) {
+            fprintf(stderr, "Error: Destroying bucket lock.\n");
+        }
     }
-    pthread_rwlock_destroy(&ht->globalLock);
+    if (pthread_rwlock_destroy(&ht->globalLock)) {
+        fprintf(stderr, "Error: Destroying global lock.\n");
+    }
     free(ht->bucketLocks);
     free(ht);
 }

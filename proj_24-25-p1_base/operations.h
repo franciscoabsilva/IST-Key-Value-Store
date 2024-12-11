@@ -33,7 +33,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut);
 
 /// Writes the state of the KVS.
 /// @param fd File descriptor to write the output.
-void kvs_show(int fdOut);
+int kvs_show(int fdOut);
 
 /// Creates a backup of the KVS state and stores it in the correspondent
 /// backup file
