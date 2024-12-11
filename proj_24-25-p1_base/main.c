@@ -137,11 +137,9 @@ void *process_thread(void *arg){
           break;
 
         case CMD_BACKUP:
-
           if (pthread_mutex_lock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
           } 
-          
           // backup limit hasnt been reached yet
           if((*backupCounter) > 0){
             (*backupCounter)--;
@@ -159,6 +157,7 @@ void *process_thread(void *arg){
           if (pthread_mutex_unlock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to unlock mutex\n");
           }
+
           pid_t pid = fork();
 
           if(pid < 0){
@@ -183,6 +182,12 @@ void *process_thread(void *arg){
               fprintf(stderr, "Failed to perform backup.\n");
             }
             // terminate child
+              pthread_mutex_destroy(&backupCounterMutex);
+              pthread_mutex_destroy(&threadMutex);
+              kvs_terminate();
+              close(fd);
+              close(fdOut);
+              closedir(dir);
             exit(0);
           }
 
@@ -269,10 +274,10 @@ int main(int argc, char *argv[]) {
   }
 
   // terminates after processing all files
-  while(wait(NULL) > 0);
   for(unsigned int i = 0; i < MAX_THREADS; i++){
     pthread_join(thread[i], NULL);
   }
+  while(wait(NULL) > 0);
 
   if(closedir(dir)){
     fprintf(stderr, "Failed to close directory\n");
