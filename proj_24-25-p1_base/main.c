@@ -255,13 +255,10 @@ void *process_thread(void *arg){
               close(fdOut) < 0) {
             fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
           }
-          if (close(fdOut) < 0) {
-            fprintf(stderr, "Failed to close output file: %s\n", strerror(errno));
-          }
-          eocFlag = 1;
           if (pthread_mutex_lock(&threadMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
           }
+          eocFlag = 1;
           break;
       }
     }
