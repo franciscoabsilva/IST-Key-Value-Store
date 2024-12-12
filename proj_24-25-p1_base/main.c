@@ -33,7 +33,7 @@ void *process_thread(void *arg){
 
 
   if (pthread_mutex_lock(&threadMutex)) {
-    fprintf(stderr, "Failed to lock mutex\n");
+    fprintf(stderr, "Failed to lock mutex: %s\n", strerror(errno));
   }
   
   struct dirent *entry;
@@ -48,7 +48,7 @@ void *process_thread(void *arg){
     char filePath[PATH_MAX];
     snprintf(filePath, sizeof(filePath), "%s/%s", directory_path, entry->d_name);
     if (pthread_mutex_unlock(&threadMutex)) {
-      fprintf(stderr, "Failed to unlock mutex\n");
+      fprintf(stderr, "Failed to unlock mutex: %s\n", strerror(errno));
     }
 
     // open the file
@@ -91,14 +91,10 @@ void *process_thread(void *arg){
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
-          if(pthread_rwlock_rdlock(&globalHashLock)){
-            fprintf(stderr, "Failed to lock global hash lock\n");
-          }
-          if (kvs_write(num_pairs, keys, values)) {
+          if (pthread_rwlock_rdlock(&globalHashLock)||
+              kvs_write(num_pairs, keys, values) ||
+              pthread_rwlock_unlock(&globalHashLock)) {
             fprintf(stderr, "Failed to write pair\n");
-          }
-          if(pthread_rwlock_unlock(&globalHashLock)){
-            fprintf(stderr, "Failed to unlock global hash lock\n");
           }
           break;
 
@@ -122,14 +118,10 @@ void *process_thread(void *arg){
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
-          if(pthread_rwlock_rdlock(&globalHashLock)){
-            fprintf(stderr, "Failed to lock global hash lock\n");
-          }
-          if (kvs_delete(num_pairs, keys, fdOut)) {
+          if (pthread_rwlock_rdlock(&globalHashLock)||
+              kvs_delete(num_pairs, keys, fdOut)||
+              pthread_rwlock_unlock(&globalHashLock)) {
             fprintf(stderr, "Failed to delete pair\n");
-          }
-          if(pthread_rwlock_unlock(&globalHashLock)){
-            fprintf(stderr, "Failed to unlock global hash lock\n");
           }
           break;
 
@@ -179,6 +171,11 @@ void *process_thread(void *arg){
             fprintf(stderr, "Failed to lock global hash lock\n");
           }
           pid_t pid = fork();
+
+          if (pid < 0) {
+            fprintf(stderr, "Failed to create backup\n");
+          }
+
           if(pthread_rwlock_unlock(&globalHashLock)){
             fprintf(stderr, "Failed to unlock global hash lock\n");
           }
@@ -196,16 +193,18 @@ void *process_thread(void *arg){
             int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if(fdBck == -1){
               fprintf(stderr, "Failed to open backup file\n");
-              pthread_mutex_destroy(&backupCounterMutex);
-              pthread_mutex_destroy(&threadMutex);
-              pthread_rwlock_destroy(&globalHashLock);
-              kvs_terminate();
-              close(fd);
-              close(fdOut);
-              closedir(dir);
+
+              if (pthread_mutex_destroy(&backupCounterMutex)||
+                  pthread_mutex_destroy(&threadMutex)||
+                  pthread_rwlock_destroy(&globalHashLock)||
+                  kvs_terminate()||
+                  close(fd) < 0 ||
+                  close(fdOut) < 0 ||
+                  closedir(dir) < 0) {
+                fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
+              }
               exit(1);
             }
- 
 
             // perform kvs backup
             if (kvs_backup(fdBck)) {  
@@ -213,12 +212,15 @@ void *process_thread(void *arg){
             }
             
             // terminate child
-            pthread_mutex_destroy(&backupCounterMutex);
-            pthread_mutex_destroy(&threadMutex);
-            kvs_terminate();
-            close(fd);
-            close(fdOut);
-            closedir(dir);
+            if (pthread_mutex_destroy(&backupCounterMutex)||
+                pthread_mutex_destroy(&threadMutex)||
+                pthread_rwlock_destroy(&globalHashLock)||
+                kvs_terminate()||
+                close(fd) < 0 ||
+                close(fdOut) < 0 ||
+                closedir(dir) < 0) {
+              fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
+            }
             exit(0);
           }
 
@@ -240,7 +242,7 @@ void *process_thread(void *arg){
               "  DELETE [key,key2,...]\n"
               "  SHOW\n"
               "  WAIT <delay_ms>\n"
-              "  BACKUP\n" // Not implemented
+              "  BACKUP\n"
               "  HELP\n"
           );
           break;
@@ -249,8 +251,13 @@ void *process_thread(void *arg){
           break;
 
         case EOC:
-          close(fd);
-          close(fdOut);
+          if (close(fd) < 0||
+              close(fdOut) < 0) {
+            fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
+          }
+          if (close(fdOut) < 0) {
+            fprintf(stderr, "Failed to close output file: %s\n", strerror(errno));
+          }
           eocFlag = 1;
           if (pthread_mutex_lock(&threadMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
@@ -289,44 +296,48 @@ int main(int argc, char *argv[]) {
 
   // initialize the key-value store
   if (kvs_init()) {
-    closedir(dir);
+    if (closedir(dir)) {
+      fprintf(stderr, "Failed to close directory\n");
+    }
     fprintf(stderr, "Failed to initialize KVS\n");
     return 1;
   }
 
-  // define mutex
-  pthread_mutex_init(&backupCounterMutex, NULL);
-  pthread_mutex_init(&threadMutex, NULL);
-  pthread_rwlock_init(&globalHashLock, NULL);
+  if (pthread_mutex_init(&backupCounterMutex, NULL)|| 
+      pthread_mutex_init(&threadMutex, NULL)|| 
+      pthread_rwlock_init(&globalHashLock, NULL)) {
+      fprintf(stderr, "Failed to initialize lock: %s\n", strerror(errno));
+  }
 
   pthread_t thread[MAX_THREADS];
   struct ThreadArgs args = {dir, directory_path, &backupCounter};
   for(unsigned int i = 0; i < MAX_THREADS; i++){
-    pthread_create(&thread[i], NULL, process_thread, (void *)&args);
+    if (pthread_create(&thread[i], NULL, process_thread, (void *)&args)) {
+      fprintf(stderr, "Failed to create thread\n");
+    }
   }
 
   // terminates after processing all files
   for(unsigned int i = 0; i < MAX_THREADS; i++){
-    pthread_join(thread[i], NULL);
+    if (pthread_join(thread[i], NULL)) {
+      fprintf(stderr, "Failed to join thread\n");
+    }
   }
 
   // wait for all child processes to terminate
   if(pthread_mutex_lock(&backupCounterMutex)){
     fprintf(stderr, "Failed to lock mutex\n");
   }
+
   while(wait(NULL) > 0);
-  if(pthread_mutex_unlock(&backupCounterMutex)){
-    fprintf(stderr, "Failed to unlock mutex\n");
+
+  if (closedir(dir)||
+      pthread_mutex_destroy(&backupCounterMutex)||
+      pthread_mutex_destroy(&threadMutex)||
+      pthread_rwlock_destroy(&globalHashLock)||
+      kvs_terminate()) {
+    fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
   }
 
-  if(closedir(dir)){
-    fprintf(stderr, "Failed to close directory\n");
-    return 1;
-  }
-
-  pthread_mutex_destroy(&backupCounterMutex);
-  pthread_mutex_destroy(&threadMutex);
-  pthread_rwlock_destroy(&globalHashLock);
-  kvs_terminate();
   return 0;
   }

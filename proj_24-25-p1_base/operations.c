@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "kvs.h"
 #include "constants.h"
@@ -233,7 +234,9 @@ int kvs_show(int fdOut) {
 int kvs_backup(int fdBck) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
-    close(fdBck);
+    if (close(fdBck) < 0) {
+      fprintf(stderr, "Failed to close backup file: %s\n", strerror(errno));
+    }
     return 1;
   }
   char buffer[MAX_WRITE_SIZE];
@@ -251,7 +254,10 @@ int kvs_backup(int fdBck) {
       return 1;
     }
   }
-  close(fdBck);
+  if (close(fdBck) < 0) {
+    fprintf(stderr, "Failed to close backup file: %s\n", strerror(errno));
+    return 1;
+  }
   return 0;
 }
 
