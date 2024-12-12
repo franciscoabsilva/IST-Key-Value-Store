@@ -8,6 +8,8 @@
 #include <fcntl.h> // isto significa file control option, deve ser do fd
 #include <pthread.h> // IMPORTEI ESTES DOIS AQUI COM <> EM VEZ DE ""
 #include <sys/wait.h>
+#include <errno.h>
+
 
 
 #include "constants.h"
@@ -152,16 +154,16 @@ void *process_thread(void *arg){
           // backup limit has been reached
           else{
             // wait for a child process to terminate
-            pid_t terminated_pid = wait(NULL); 
-            if (terminated_pid == -1) {
-              fprintf(stderr, "Failed to wait for child process\n");
-            }
+            pid_t terminated_pid;
+
+            do {
+              terminated_pid = wait(NULL); 
+            } while (terminated_pid == -1);
           }
        
           if (pthread_mutex_unlock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to unlock mutex\n");
           }
-
           pid_t pid = fork();
 
           if(pid < 0){
@@ -288,7 +290,15 @@ int main(int argc, char *argv[]) {
   for(unsigned int i = 0; i < MAX_THREADS; i++){
     pthread_join(thread[i], NULL);
   }
+
+  // wait for all child processes to terminate
+  if(pthread_mutex_lock(&backupCounterMutex)){
+    fprintf(stderr, "Failed to lock mutex\n");
+  }
   while(wait(NULL) > 0);
+  if(pthread_mutex_unlock(&backupCounterMutex)){
+    fprintf(stderr, "Failed to unlock mutex\n");
+  }
 
   if(closedir(dir)){
     fprintf(stderr, "Failed to close directory\n");
