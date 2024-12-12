@@ -10,8 +10,6 @@
 #include <sys/wait.h>
 #include <errno.h>
 
-
-
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
@@ -19,6 +17,7 @@
 #define PATH_MAX 4096
 pthread_mutex_t backupCounterMutex;
 pthread_mutex_t threadMutex;
+pthread_rwlock_t globalHashLock;
 
 struct ThreadArgs {
   DIR *dir;
@@ -26,12 +25,11 @@ struct ThreadArgs {
   unsigned int *backupCounter;
 };
 
-
 void *process_thread(void *arg){
   struct ThreadArgs *arg_struct = (struct ThreadArgs *)arg;
   DIR *dir = arg_struct->dir;
   char *directory_path = arg_struct->directory_path;
-  unsigned int *backupCounter = arg_struct->backupCounter; 
+  unsigned int *backupCounter = arg_struct->backupCounter;
 
 
   if (pthread_mutex_lock(&threadMutex)) {
@@ -93,9 +91,14 @@ void *process_thread(void *arg){
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
-
+          if(pthread_rwlock_rdlock(&globalHashLock)){
+            fprintf(stderr, "Failed to lock global hash lock\n");
+          }
           if (kvs_write(num_pairs, keys, values)) {
             fprintf(stderr, "Failed to write pair\n");
+          }
+          if(pthread_rwlock_unlock(&globalHashLock)){
+            fprintf(stderr, "Failed to unlock global hash lock\n");
           }
           break;
 
@@ -119,8 +122,14 @@ void *process_thread(void *arg){
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
+          if(pthread_rwlock_rdlock(&globalHashLock)){
+            fprintf(stderr, "Failed to lock global hash lock\n");
+          }
           if (kvs_delete(num_pairs, keys, fdOut)) {
             fprintf(stderr, "Failed to delete pair\n");
+          }
+          if(pthread_rwlock_unlock(&globalHashLock)){
+            fprintf(stderr, "Failed to unlock global hash lock\n");
           }
           break;
 
@@ -159,12 +168,20 @@ void *process_thread(void *arg){
             do {
               terminated_pid = wait(NULL); 
             } while (terminated_pid == -1);
+
           }
        
           if (pthread_mutex_unlock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to unlock mutex\n");
           }
+          
+          if(pthread_rwlock_wrlock(&globalHashLock)){
+            fprintf(stderr, "Failed to lock global hash lock\n");
+          }
           pid_t pid = fork();
+          if(pthread_rwlock_unlock(&globalHashLock)){
+            fprintf(stderr, "Failed to unlock global hash lock\n");
+          }
 
           if(pid < 0){
             fprintf(stderr, "Failed to create backup\n");
@@ -175,19 +192,20 @@ void *process_thread(void *arg){
             // create file path for backup
             char bckPath[PATH_MAX];
             snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck", (int)(strlen(filePath) - 4), filePath, totalBck);
-
             // create and open the backup file
             int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if(fdBck == -1){
               fprintf(stderr, "Failed to open backup file\n");
               pthread_mutex_destroy(&backupCounterMutex);
               pthread_mutex_destroy(&threadMutex);
+              pthread_rwlock_destroy(&globalHashLock);
               kvs_terminate();
               close(fd);
               close(fdOut);
               closedir(dir);
               exit(1);
             }
+ 
 
             // perform kvs backup
             if (kvs_backup(fdBck)) {  
@@ -279,6 +297,7 @@ int main(int argc, char *argv[]) {
   // define mutex
   pthread_mutex_init(&backupCounterMutex, NULL);
   pthread_mutex_init(&threadMutex, NULL);
+  pthread_rwlock_init(&globalHashLock, NULL);
 
   pthread_t thread[MAX_THREADS];
   struct ThreadArgs args = {dir, directory_path, &backupCounter};
@@ -307,6 +326,7 @@ int main(int argc, char *argv[]) {
 
   pthread_mutex_destroy(&backupCounterMutex);
   pthread_mutex_destroy(&threadMutex);
+  pthread_rwlock_destroy(&globalHashLock);
   kvs_terminate();
   return 0;
   }
