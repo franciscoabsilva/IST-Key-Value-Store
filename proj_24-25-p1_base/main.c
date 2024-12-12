@@ -30,10 +30,14 @@ void *process_thread(void *arg){
   DIR *dir = arg_struct->dir;
   char *directory_path = arg_struct->directory_path;
   unsigned int *backupCounter = arg_struct->backupCounter; 
+
+
   if (pthread_mutex_lock(&threadMutex)) {
     fprintf(stderr, "Failed to lock mutex\n");
   }
+  
   struct dirent *entry;
+
   while ((entry = readdir(dir)) != NULL) {
 
     // check if the file has the .job extension
@@ -174,6 +178,12 @@ void *process_thread(void *arg){
             int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if(fdBck == -1){
               fprintf(stderr, "Failed to open backup file\n");
+              pthread_mutex_destroy(&backupCounterMutex);
+              pthread_mutex_destroy(&threadMutex);
+              kvs_terminate();
+              close(fd);
+              close(fdOut);
+              closedir(dir);
               exit(1);
             }
 
@@ -181,13 +191,14 @@ void *process_thread(void *arg){
             if (kvs_backup(fdBck)) {  
               fprintf(stderr, "Failed to perform backup.\n");
             }
+            
             // terminate child
-              pthread_mutex_destroy(&backupCounterMutex);
-              pthread_mutex_destroy(&threadMutex);
-              kvs_terminate();
-              close(fd);
-              close(fdOut);
-              closedir(dir);
+            pthread_mutex_destroy(&backupCounterMutex);
+            pthread_mutex_destroy(&threadMutex);
+            kvs_terminate();
+            close(fd);
+            close(fdOut);
+            closedir(dir);
             exit(0);
           }
 
@@ -267,8 +278,8 @@ int main(int argc, char *argv[]) {
   pthread_mutex_init(&backupCounterMutex, NULL);
   pthread_mutex_init(&threadMutex, NULL);
 
-  struct ThreadArgs args = {dir, directory_path, &backupCounter};
   pthread_t thread[MAX_THREADS];
+  struct ThreadArgs args = {dir, directory_path, &backupCounter};
   for(unsigned int i = 0; i < MAX_THREADS; i++){
     pthread_create(&thread[i], NULL, process_thread, (void *)&args);
   }

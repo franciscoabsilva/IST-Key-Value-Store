@@ -262,10 +262,14 @@ int kvs_backup(int fdBck) {
     close(fdBck);
     return 1;
   }
-  if (kvs_show(fdBck)) {
-    fprintf(stderr, "Failed to show pairs\n");
-    close(fdBck);
-    return 1;
+  char buffer[MAX_WRITE_SIZE];
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    KeyNode *keyNode = kvs_table->table[i];
+    while (keyNode != NULL) {
+      snprintf(buffer,sizeof(buffer),"(%s, %s)\n", keyNode->key, keyNode->value);
+      write(fdBck, buffer, strlen(buffer));
+      keyNode = keyNode->next; // Move to the next node
+    }
   }
   close(fdBck);
   return 0;
