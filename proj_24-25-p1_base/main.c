@@ -224,7 +224,7 @@ void *process_thread(void *arg){
                 closedir(dir) < 0) {
               fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
             }
-            exit(0);
+            _exit(0);
           }
 
           // father process
