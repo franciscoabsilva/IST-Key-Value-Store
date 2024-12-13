@@ -61,11 +61,11 @@ void *process_thread(void *arg) {
     }
 
     // copy the path without the .job extension
-    char basePath[PATH_MAX];
+    char basePath[PATH_MAX] = "";
     strncpy(basePath, filePath, strlen(filePath) - 4);
 
     // creates the output file path with .out extension
-    char outPath[PATH_MAX];
+    char outPath[PATH_MAX] = "";
     snprintf(outPath, sizeof(basePath) + 4, "%s.out", basePath);
 
     // opens or creates the output file
