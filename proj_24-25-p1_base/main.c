@@ -8,6 +8,7 @@
 #include <fcntl.h> // isto significa file control option, deve ser do fd
 #include <pthread.h> // IMPORTEI ESTES DOIS AQUI COM <> EM VEZ DE ""
 #include <sys/wait.h>
+#include <errno.h>
 
 #include "constants.h"
 #include "parser.h"
@@ -32,7 +33,7 @@ void *process_thread(void *arg){
 
 
   if (pthread_mutex_lock(&threadMutex)) {
-    fprintf(stderr, "Failed to lock mutex");
+    fprintf(stderr, "Failed to lock mutex: %s\n", strerror(errno));
   }
   
   struct dirent *entry;
@@ -47,7 +48,7 @@ void *process_thread(void *arg){
     char filePath[PATH_MAX];
     snprintf(filePath, sizeof(filePath), "%s/%s", directory_path, entry->d_name);
     if (pthread_mutex_unlock(&threadMutex)) {
-      fprintf(stderr, "Failed to unlock mutex");
+      fprintf(stderr, "Failed to unlock mutex: %s\n", strerror(errno));
     }
 
     // open the file
@@ -81,7 +82,6 @@ void *process_thread(void *arg){
     unsigned int totalBck = 1;
 
     int eocFlag = 0;
-
     while(!eocFlag){
       switch (get_next(fd)) {
         case CMD_WRITE:
@@ -143,6 +143,7 @@ void *process_thread(void *arg){
           break;
 
         case CMD_BACKUP:
+        // CRITIAL SECTION BACKUPCOUNTER
           if (pthread_mutex_lock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
           } 
@@ -165,19 +166,21 @@ void *process_thread(void *arg){
           if (pthread_mutex_unlock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to unlock mutex\n");
           }
+          // END OF BACKUPCOUNTER CRITICAL SECTION
           
+          // CRITICAL SECTION HASHTABLE
+          // there cant be writes or deletes on the hashtable while the fork is being made
           if(pthread_rwlock_wrlock(&globalHashLock)){
             fprintf(stderr, "Failed to lock global hash lock\n");
           }
-          pid_t pid = fork();
 
-          if (pid < 0) {
-            fprintf(stderr, "Failed to create backup\n");
-          }
+          pid_t pid = fork();
 
           if(pthread_rwlock_unlock(&globalHashLock)){
             fprintf(stderr, "Failed to unlock global hash lock\n");
           }
+
+          // END OF CRITICAL SECTION HASHTABLE
 
           if(pid < 0){
             fprintf(stderr, "Failed to create backup\n");
@@ -193,14 +196,14 @@ void *process_thread(void *arg){
             if(fdBck == -1){
               fprintf(stderr, "Failed to open backup file\n");
 
-              if (pthread_mutex_destroy(&backupCounterMutex)||
-                  pthread_mutex_destroy(&threadMutex)||
-                  pthread_rwlock_destroy(&globalHashLock)||
-                  kvs_terminate()||
+                pthread_mutex_destroy(&backupCounterMutex); // TODO estes locks nao podem estar no if porque nao temos
+                pthread_mutex_destroy(&threadMutex);       // maneira de saber se estao locked ou nao antes de tentarmos destruilos
+                pthread_rwlock_destroy(&globalHashLock);
+                if (kvs_terminate()||
                   close(fd) < 0 ||
                   close(fdOut) < 0 ||
                   closedir(dir) < 0) {
-                fprintf(stderr, "Failed to close resources");
+                fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
               }
               exit(1);
             }
@@ -211,14 +214,15 @@ void *process_thread(void *arg){
             }
             
             // terminate child
-            if (pthread_mutex_destroy(&backupCounterMutex)||
-                pthread_mutex_destroy(&threadMutex)||
-                pthread_rwlock_destroy(&globalHashLock)||
-                kvs_terminate()||
+            
+            pthread_mutex_destroy(&backupCounterMutex); // TODO estes locks nao podem estar no if porque nao temos
+            pthread_mutex_destroy(&threadMutex);       // maneira de saber se estao locked ou nao antes de tentarmos destruilos
+            pthread_rwlock_destroy(&globalHashLock);
+            if (kvs_terminate()||
                 close(fd) < 0 ||
                 close(fdOut) < 0 ||
                 closedir(dir) < 0) {
-              fprintf(stderr, "Failed to close resources");
+              fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
             }
             exit(0);
           }
@@ -252,7 +256,7 @@ void *process_thread(void *arg){
         case EOC:
           if (close(fd) < 0||
               close(fdOut) < 0) {
-            fprintf(stderr, "Failed to close file");
+            fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
           }
           if (pthread_mutex_lock(&threadMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
@@ -302,7 +306,7 @@ int main(int argc, char *argv[]) {
   if (pthread_mutex_init(&backupCounterMutex, NULL)|| 
       pthread_mutex_init(&threadMutex, NULL)|| 
       pthread_rwlock_init(&globalHashLock, NULL)) {
-      fprintf(stderr, "Failed to initialize lock");
+      fprintf(stderr, "Failed to initialize lock: %s\n", strerror(errno));
   }
 
   pthread_t thread[MAX_THREADS];
@@ -333,7 +337,7 @@ int main(int argc, char *argv[]) {
       pthread_mutex_destroy(&threadMutex)||
       pthread_rwlock_destroy(&globalHashLock)||
       kvs_terminate()) {
-    fprintf(stderr, "Failed to close resources");
+    fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
   }
 
   return 0;
