@@ -31,13 +31,12 @@ void *process_thread(void *arg){
   char *directory_path = arg_struct->directory_path;
   unsigned int *backupCounter = arg_struct->backupCounter;
 
+  struct dirent *entry;
 
+  // CRITICAL SECTION DIR
   if (pthread_mutex_lock(&threadMutex)) {
     fprintf(stderr, "Failed to lock mutex: %s\n", strerror(errno));
   }
-  
-  struct dirent *entry;
-
   while ((entry = readdir(dir)) != NULL) {
 
     // check if the file has the .job extension
@@ -50,6 +49,7 @@ void *process_thread(void *arg){
     if (pthread_mutex_unlock(&threadMutex)) {
       fprintf(stderr, "Failed to unlock mutex: %s\n", strerror(errno));
     }
+    // END OF CRITICAL SECTION DIR
 
     // open the file
     int fd = open(filePath, O_RDONLY);
@@ -152,7 +152,7 @@ void *process_thread(void *arg){
           if (pthread_mutex_lock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
           } 
-          // backup limit hasnt been reached yet
+          // backup limit hasn't been reached yet
           if((*backupCounter) > 0){
             (*backupCounter)--;
           }
@@ -171,46 +171,44 @@ void *process_thread(void *arg){
           if (pthread_mutex_unlock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to unlock mutex\n");
           }
-          if(pthread_mutex_lock(&threadMutex)){
-            fprintf(stderr, "Failed to lock mutex\n");
-          }
           // END OF BACKUPCOUNTER CRITICAL SECTION
           
           // CRITICAL SECTION HASHTABLE
-          // there cant be writes or deletes on the hashtable while the fork is being made
-          if(pthread_rwlock_wrlock(&globalHashLock)){
+          // (there cant be any type of access that might change the hashtable 
+          //  or allocate memory while we are creating a backup)
+          if(pthread_rwlock_wrlock(&globalHashLock) ||
+             pthread_mutex_lock(&threadMutex)){
             fprintf(stderr, "Failed to lock global hash lock\n");
           }
 
           pid_t pid = fork();
-
-          if(pthread_rwlock_unlock(&globalHashLock)){
-            fprintf(stderr, "Failed to unlock global hash lock\n");
-          }
-          if(pthread_mutex_unlock(&threadMutex)){
-            fprintf(stderr, "Failed to unlock mutex\n");
-          }
-
-          // END OF CRITICAL SECTION HASHTABLE
-
           if(pid < 0){
             fprintf(stderr, "Failed to create backup\n");
           }
 
+          if(pthread_rwlock_unlock(&globalHashLock) ||
+             pthread_mutex_unlock(&threadMutex)){
+            fprintf(stderr, "Failed to unlock global hash lock\n");
+          }
+          // END OF CRITICAL SECTION HASHTABLE
+          
           // child process
           else if(pid == 0){
             // create file path for backup
             char bckPath[PATH_MAX];
             snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck", (int)(strlen(filePath) - 4), filePath, totalBck);
+
             // create and open the backup file
             int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if(fdBck == -1){
               fprintf(stderr, "Failed to open backup file\n");
 
                 pthread_mutex_destroy(&backupCounterMutex); // TODO estes locks nao podem estar no if porque nao temos
-                pthread_mutex_destroy(&threadMutex);       // maneira de saber se estao locked ou nao antes de tentarmos destruilos
-                pthread_rwlock_destroy(&globalHashLock);
-                if (kvs_terminate()||
+                                                            // maneira de saber se estao locked ou nao antes de tentarmos destruilos
+                
+              if (pthread_rwlock_destroy(&globalHashLock) ||
+                  pthread_mutex_destroy(&threadMutex) ||
+                  kvs_terminate()||
                   close(fd) < 0 ||
                   close(fdOut) < 0 ||
                   closedir(dir) < 0) {
@@ -227,9 +225,11 @@ void *process_thread(void *arg){
             // terminate child
             
             pthread_mutex_destroy(&backupCounterMutex); // TODO estes locks nao podem estar no if porque nao temos
-            pthread_mutex_destroy(&threadMutex);       // maneira de saber se estao locked ou nao antes de tentarmos destruilos
-            pthread_rwlock_destroy(&globalHashLock);
-            if (kvs_terminate()||
+                   // maneira de saber se estao locked ou nao antes de tentarmos destruilos
+            
+            if (pthread_rwlock_destroy(&globalHashLock) ||
+                pthread_mutex_destroy(&threadMutex) ||     
+                kvs_terminate()||
                 close(fd) < 0 ||
                 close(fdOut) < 0 ||
                 closedir(dir) < 0) {
@@ -265,7 +265,7 @@ void *process_thread(void *arg){
           break;
 
         case EOC:
-          if (close(fd) < 0||
+          if (close(fd) < 0 ||
               close(fdOut) < 0) {
             fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
           }
@@ -299,6 +299,7 @@ int main(int argc, char *argv[]) {
 
 
   DIR *dir = opendir(directory_path);
+
   // check if the directory exists
   if(dir == NULL){
     fprintf(stderr, "Failed to open directory\n");
@@ -314,12 +315,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+// initialize locks
   if (pthread_mutex_init(&backupCounterMutex, NULL)|| 
       pthread_mutex_init(&threadMutex, NULL)|| 
       pthread_rwlock_init(&globalHashLock, NULL)) {
       fprintf(stderr, "Failed to initialize lock: %s\n", strerror(errno));
   }
 
+// create threads
   pthread_t thread[MAX_THREADS];
   struct ThreadArgs args = {dir, directory_path, &backupCounter};
   for(unsigned int i = 0; i < MAX_THREADS; i++){
@@ -328,7 +331,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // terminates after processing all files
+  // joins threads after processing all files in dir
   for(unsigned int i = 0; i < MAX_THREADS; i++){
     if (pthread_join(thread[i], NULL)) {
       fprintf(stderr, "Failed to join thread\n");
@@ -339,7 +342,6 @@ int main(int argc, char *argv[]) {
   if(pthread_mutex_lock(&backupCounterMutex)){
     fprintf(stderr, "Failed to lock mutex\n");
   }
-
   while(wait(NULL) > 0);
 
   if (pthread_mutex_unlock(&backupCounterMutex)||

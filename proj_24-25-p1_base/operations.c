@@ -43,7 +43,13 @@ int kvs_terminate() {
 int compare_pairs(const void *a, const void *b) {
     const KeyValuePair *pair1 = (const KeyValuePair *)a;
     const KeyValuePair *pair2 = (const KeyValuePair *)b;
-    return strcmp(pair1->key, pair2->key); // Sort by keys alphabetically
+    return strcmp(pair1->key, pair2->key); 
+}
+
+int compare_keys(const void *a, const void *b) {
+    const char *key1 = (const char *)a;
+    const char *key2 = (const char *)b;
+    return strcmp(key1, key2);
 }
 
 int lock_write_list(size_t num_pairs, char keys[][MAX_STRING_SIZE], int indexList[]){
@@ -110,7 +116,7 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
     strcpy(sortedKeys[i], pairs[i][0]);
   }  
 
-  // Lock all
+  // Lock all meaningful keys
   int indexList[TABLE_SIZE] = {0};
   if(lock_write_list(num_pairs, sortedKeys, indexList)){
     return 1;
@@ -118,9 +124,9 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
 
   // Write the sorted pairs
   for (size_t i = 0; i < num_pairs; i++) {
-      if (write_pair(kvs_table, pairs[i][0], pairs[i][1]) != 0) {
-          fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0], pairs[i][1]);
-      }
+    if (write_pair(kvs_table, pairs[i][0], pairs[i][1])) {
+        fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0], pairs[i][1]);
+    }
   }
 
   // Unlock all
@@ -130,12 +136,6 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
   return 0;
 }
 
-int compare_keys(const void *a, const void *b) {
-    const char *key1 = (const char *)a;
-    const char *key2 = (const char *)b;
-    return strcmp(key1, key2);
-}
-
 int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
@@ -143,7 +143,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   }
   qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
 
-  // Lock all
+  // Lock all meaningful keys
   int indexList[TABLE_SIZE] = {0};
   if (lock_read_list(num_pairs, keys, indexList)) {
     return 1;
@@ -154,11 +154,13 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   for (size_t i = 0; i < num_pairs; i++) {
     char buffer[MAX_WRITE_SIZE];
     char* result = read_pair(kvs_table, keys[i]);
+
     if (result == NULL) {
       snprintf(buffer, sizeof(buffer), "(%s,KVSERROR)", keys[i]);
-    } else {
+    }else {
       snprintf(buffer, sizeof(buffer), "(%s,%s)", keys[i], result);
-    }
+    } 
+
     if(write(fdOut, buffer, strlen(buffer)) < 0){
       fprintf(stderr, "Failed to write to output file");
     }
@@ -182,7 +184,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   }
   qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
 
-  // Lock all
+  // Lock all meaningful keys
   int indexList[TABLE_SIZE] = {0};
   if (lock_write_list(num_pairs, keys, indexList)) {
     return 1;
@@ -218,12 +220,14 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
 }
 
 int kvs_show(int fdOut) {
+  // Lock all table
   for(int i = 0; i < TABLE_SIZE; i++){
     if (pthread_rwlock_rdlock(&kvs_table->bucketLocks[i])) {
       fprintf(stderr, "Failed to lock bucket %d\n", i);
       return 1;
     }
   }
+  
   char buffer[MAX_WRITE_SIZE];
   for (int i = 0; i < TABLE_SIZE; i++) {
     KeyNode *keyNode = kvs_table->table[i];
@@ -235,6 +239,8 @@ int kvs_show(int fdOut) {
       keyNode = keyNode->next; // Move to the next node
     }
   }
+
+  // Unlock all
   for(int i = 0; i < TABLE_SIZE; i++){
     if (pthread_rwlock_unlock(&kvs_table->bucketLocks[i])) {
       fprintf(stderr, "Failed to unlock bucket %d\n", i);
