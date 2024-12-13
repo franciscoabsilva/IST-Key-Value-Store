@@ -5,7 +5,6 @@
 #include <ctype.h>
 #include <pthread.h>
 #include <stdio.h>
-#include <errno.h>
 
 
 // Hash function based on key initial.
@@ -28,7 +27,7 @@ struct HashTable* create_hash_table() {
     if (!ht) return NULL;
     ht->bucketLocks = malloc(TABLE_SIZE * sizeof(pthread_rwlock_t));
     if (!ht->bucketLocks) {
-        fprintf(stderr, "Error: Allocating bucket locks: %s\n", strerror(errno));
+        fprintf(stderr, "Error: Allocating bucket locks");
         free(ht);
         return NULL;
     }
@@ -60,13 +59,13 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
     // Key not found, create a new key node
     keyNode = malloc(sizeof(KeyNode));
     if (!keyNode){
-        fprintf(stderr, "Error: Allocating key node: %s\n", strerror(errno));
+        fprintf(stderr, "Error: Allocating key node");
         return 1;
     }
     keyNode->key = strdup(key); // Allocate memory for the key
     keyNode->value = strdup(value); // Allocate memory for the value
     if (!keyNode->key || !keyNode->value) {
-        fprintf(stderr, "Error: Allocating key or value: %s\n", strerror(errno));
+        fprintf(stderr, "Error: Allocating key or value");
         free(keyNode->key);
         free(keyNode->value);
         free(keyNode);

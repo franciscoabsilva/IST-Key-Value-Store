@@ -3,7 +3,6 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include "kvs.h"
 #include "constants.h"
@@ -150,7 +149,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     return 1;
   }
   if(write(fdOut, "[", 1) < 0){
-    fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to write to output file");
   }
   for (size_t i = 0; i < num_pairs; i++) {
     char buffer[MAX_WRITE_SIZE];
@@ -161,12 +160,12 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
       snprintf(buffer, sizeof(buffer), "(%s,%s)", keys[i], result);
     }
     if(write(fdOut, buffer, strlen(buffer)) < 0){
-      fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+      fprintf(stderr, "Failed to write to output file");
     }
     free(result);
   }
   if(write(fdOut, "]\n", 2) < 0){
-    fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to write to output file");
   }
 
   // Unlock all
@@ -194,20 +193,20 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
         if(write(fdOut, "[", 1) < 0){
-          fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+          fprintf(stderr, "Failed to write to output file");
         }
         aux = 1;
       }
       char buffer[MAX_WRITE_SIZE];
       snprintf(buffer, sizeof(buffer), "(%s,KVSMISSING)", keys[i]);
       if(write(fdOut, buffer, strlen(buffer)) < 0){
-        fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+        fprintf(stderr, "Failed to write to output file");
       }
     }
   }
   if (aux) {
     if(write(fdOut, "]\n", 2) < 0){
-      fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+      fprintf(stderr, "Failed to write to output file");
     }
   }
 
@@ -231,7 +230,7 @@ int kvs_show(int fdOut) {
     while (keyNode != NULL) {
       snprintf(buffer,sizeof(buffer),"(%s, %s)\n", keyNode->key, keyNode->value);
       if (write(fdOut, buffer, strlen(buffer)) < 0) {
-        fprintf(stderr, "Failed to write to output file: %s\n", strerror(errno));
+        fprintf(stderr, "Failed to write to output file");
       }
       keyNode = keyNode->next; // Move to the next node
     }
@@ -249,7 +248,7 @@ int kvs_backup(int fdBck) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     if (close(fdBck) < 0) {
-      fprintf(stderr, "Failed to close backup file: %s\n", strerror(errno));
+      fprintf(stderr, "Failed to close backup file");
     }
     return 1;
   }
@@ -259,7 +258,7 @@ int kvs_backup(int fdBck) {
     while (keyNode != NULL) {
       snprintf(buffer,sizeof(buffer),"(%s, %s)\n", keyNode->key, keyNode->value);
       if (write(fdBck, buffer, strlen(buffer)) < 0) {
-        fprintf(stderr, "Failed to write to backup file: %s\n", strerror(errno));
+        fprintf(stderr, "Failed to write to backup file");
       }
       keyNode = keyNode->next; // Move to the next node
     }
@@ -270,7 +269,7 @@ int kvs_backup(int fdBck) {
     }
   }
   if (close(fdBck) < 0) {
-    fprintf(stderr, "Failed to close backup file: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to close backup file");
     return 1;
   }
   return 0;
