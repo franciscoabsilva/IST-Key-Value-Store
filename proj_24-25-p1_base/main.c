@@ -132,7 +132,8 @@ void *process_thread(void *arg) {
         break;
 
       case CMD_SHOW:
-        if (pthread_rwlock_rdlock(&globalHashLock) || kvs_show(fdOut) ||
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_show(fdOut) ||
             pthread_rwlock_unlock(&globalHashLock)) {
           fprintf(stderr, "Failed to show pairs\n");
         }
@@ -168,7 +169,7 @@ void *process_thread(void *arg) {
 
           do {
             terminated_pid = wait(NULL);
-          } while (terminated_pid == -1);
+          } while (terminated_pid == -1); 
         }
 
         if (pthread_mutex_unlock(&backupCounterMutex)) {
@@ -179,8 +180,7 @@ void *process_thread(void *arg) {
         // CRITICAL SECTION HASHTABLE
         // (there cant be any type of access that might change the hashtable
         //  or allocate memory while we are creating a backup)
-        if (pthread_rwlock_wrlock(&globalHashLock) ||
-            pthread_mutex_lock(&threadMutex)) {
+        if (pthread_rwlock_wrlock(&globalHashLock)) {
           fprintf(stderr, "Failed to lock global hash lock\n");
         }
 
@@ -189,8 +189,7 @@ void *process_thread(void *arg) {
           fprintf(stderr, "Failed to create backup\n");
         }
 
-        if (pthread_rwlock_unlock(&globalHashLock) ||
-            pthread_mutex_unlock(&threadMutex)) {
+        if (pthread_rwlock_unlock(&globalHashLock)) {
           fprintf(stderr, "Failed to unlock global hash lock\n");
         }
         // END OF CRITICAL SECTION HASHTABLE
@@ -342,8 +341,7 @@ int main(int argc, char *argv[]) {
   if (pthread_mutex_lock(&backupCounterMutex)) {
     fprintf(stderr, "Failed to lock mutex\n");
   }
-  while (wait(NULL) > 0)
-    ;
+  while (wait(NULL) > 0);
 
   if (pthread_mutex_unlock(&backupCounterMutex) || closedir(dir) ||
       pthread_mutex_destroy(&backupCounterMutex) ||
