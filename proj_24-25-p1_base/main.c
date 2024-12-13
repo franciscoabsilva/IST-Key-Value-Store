@@ -1,18 +1,18 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <dirent.h>
-#include <fcntl.h> 
-#include <pthread.h> 
-#include <sys/wait.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <sys/wait.h>
 
 #include "constants.h"
-#include "parser.h"
 #include "operations.h"
+#include "parser.h"
 
 #define PATH_MAX 4096
 pthread_mutex_t backupCounterMutex;
@@ -25,7 +25,7 @@ struct ThreadArgs {
   unsigned int *backupCounter;
 };
 
-void *process_thread(void *arg){
+void *process_thread(void *arg) {
   struct ThreadArgs *arg_struct = (struct ThreadArgs *)arg;
   DIR *dir = arg_struct->dir;
   char *directory_path = arg_struct->directory_path;
@@ -41,11 +41,13 @@ void *process_thread(void *arg){
 
     // check if the file has the .job extension
     size_t len = strlen(entry->d_name);
-    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job"))continue;
+    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job"))
+      continue;
 
     // get the full path of the file
     char filePath[PATH_MAX];
-    snprintf(filePath, sizeof(filePath), "%s/%s", directory_path, entry->d_name);
+    snprintf(filePath, sizeof(filePath), "%s/%s", directory_path,
+             entry->d_name);
     if (pthread_mutex_unlock(&threadMutex)) {
       fprintf(stderr, "Failed to unlock mutex: %s\n", strerror(errno));
     }
@@ -53,18 +55,18 @@ void *process_thread(void *arg){
 
     // open the file
     int fd = open(filePath, O_RDONLY);
-    if (fd < 0){
+    if (fd < 0) {
       fprintf(stderr, "Failed to open file\n");
       return NULL;
     }
 
     // copy the path without the .job extension
     char basePath[PATH_MAX];
-    strncpy(basePath, filePath, strlen(filePath) - 4);  
-    
+    strncpy(basePath, filePath, strlen(filePath) - 4);
+
     // creates the output file path with .out extension
     char outPath[PATH_MAX];
-    snprintf(outPath, sizeof(basePath) + 4, "%s.out", basePath); 
+    snprintf(outPath, sizeof(basePath) + 4, "%s.out", basePath);
 
     // opens or creates the output file
     int fdOut = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -82,226 +84,224 @@ void *process_thread(void *arg){
     unsigned int totalBck = 1;
 
     int eocFlag = 0;
-    while(!eocFlag){
+    while (!eocFlag) {
       switch (get_next(fd)) {
-        case CMD_WRITE:
-          num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-          if (num_pairs == 0) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
-          if (pthread_rwlock_rdlock(&globalHashLock)||
-              kvs_write(num_pairs, keys, values) ||
-              pthread_rwlock_unlock(&globalHashLock)) {
-            fprintf(stderr, "Failed to write pair\n");
-          }
-          break;
+      case CMD_WRITE:
+        num_pairs =
+            parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+        if (num_pairs == 0) {
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
+          continue;
+        }
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_write(num_pairs, keys, values) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to write pair\n");
+        }
+        break;
 
-        case CMD_READ:
-          num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+      case CMD_READ:
+        num_pairs =
+            parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
-          if (num_pairs == 0) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
+        if (num_pairs == 0) {
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
+          continue;
+        }
 
-          if (pthread_rwlock_rdlock(&globalHashLock) ||
-              kvs_read(num_pairs, keys, fdOut) ||
-              pthread_rwlock_unlock(&globalHashLock)) {
-            fprintf(stderr, "Failed to read pair\n");
-          }
-          break;
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_read(num_pairs, keys, fdOut) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to read pair\n");
+        }
+        break;
 
-        case CMD_DELETE:
-          num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+      case CMD_DELETE:
+        num_pairs =
+            parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
-          if (num_pairs == 0) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
-          if (pthread_rwlock_rdlock(&globalHashLock)||
-              kvs_delete(num_pairs, keys, fdOut)||
-              pthread_rwlock_unlock(&globalHashLock)) {
-            fprintf(stderr, "Failed to delete pair\n");
-          }
-          break;
+        if (num_pairs == 0) {
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
+          continue;
+        }
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_delete(num_pairs, keys, fdOut) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to delete pair\n");
+        }
+        break;
 
-        case CMD_SHOW:
-          if (pthread_rwlock_rdlock(&globalHashLock) ||
-              kvs_show(fdOut) ||
-              pthread_rwlock_unlock(&globalHashLock)) {
-            fprintf(stderr, "Failed to show pairs\n");
-          }
-          break;
+      case CMD_SHOW:
+        if (pthread_rwlock_rdlock(&globalHashLock) || kvs_show(fdOut) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to show pairs\n");
+        }
+        break;
 
-        case CMD_WAIT:
-          if (parse_wait(fd, &delay, NULL) == -1) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
+      case CMD_WAIT:
+        if (parse_wait(fd, &delay, NULL) == -1) {
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
+          continue;
+        }
 
-          if (delay > 0) {
-            write(fdOut, "Waiting...\n", 11);
-            kvs_wait(delay);
-          }
-          break;
+        if (delay > 0) {
+          write(fdOut, "Waiting...\n", 11);
+          kvs_wait(delay);
+        }
+        break;
 
-        case CMD_BACKUP:
+      case CMD_BACKUP:
 
         // CRITIAL SECTION BACKUPCOUNTER
-          if (pthread_mutex_lock(&backupCounterMutex)) {
-            fprintf(stderr, "Failed to lock mutex\n");
-          } 
-          // backup limit hasn't been reached yet
-          if((*backupCounter) > 0){
-            (*backupCounter)--;
-          }
+        if (pthread_mutex_lock(&backupCounterMutex)) {
+          fprintf(stderr, "Failed to lock mutex\n");
+        }
+        // backup limit hasn't been reached yet
+        if ((*backupCounter) > 0) {
+          (*backupCounter)--;
+        }
 
-          // backup limit has been reached
-          else{
-            // wait for a child process to terminate
-            pid_t terminated_pid;
+        // backup limit has been reached
+        else {
+          // wait for a child process to terminate
+          pid_t terminated_pid;
 
-            do {
-              terminated_pid = wait(NULL); 
-            } while (terminated_pid == -1);
+          do {
+            terminated_pid = wait(NULL);
+          } while (terminated_pid == -1);
+        }
 
-          }
-       
-          if (pthread_mutex_unlock(&backupCounterMutex)) {
-            fprintf(stderr, "Failed to unlock mutex\n");
-          }
-          // END OF BACKUPCOUNTER CRITICAL SECTION
-          
-          // CRITICAL SECTION HASHTABLE
-          // (there cant be any type of access that might change the hashtable 
-          //  or allocate memory while we are creating a backup)
-          if(pthread_rwlock_wrlock(&globalHashLock) ||
-             pthread_mutex_lock(&threadMutex)){
-            fprintf(stderr, "Failed to lock global hash lock\n");
-          }
+        if (pthread_mutex_unlock(&backupCounterMutex)) {
+          fprintf(stderr, "Failed to unlock mutex\n");
+        }
+        // END OF BACKUPCOUNTER CRITICAL SECTION
 
-          pid_t pid = fork();
-          if(pid < 0){
-            fprintf(stderr, "Failed to create backup\n");
-          }
+        // CRITICAL SECTION HASHTABLE
+        // (there cant be any type of access that might change the hashtable
+        //  or allocate memory while we are creating a backup)
+        if (pthread_rwlock_wrlock(&globalHashLock) ||
+            pthread_mutex_lock(&threadMutex)) {
+          fprintf(stderr, "Failed to lock global hash lock\n");
+        }
 
-          if(pthread_rwlock_unlock(&globalHashLock) ||
-             pthread_mutex_unlock(&threadMutex)){
-            fprintf(stderr, "Failed to unlock global hash lock\n");
-          }
-          // END OF CRITICAL SECTION HASHTABLE
-          
-          // child process
-          else if(pid == 0){
-            // create file path for backup
-            char bckPath[PATH_MAX];
-            snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck", (int)(strlen(filePath) - 4), filePath, totalBck);
+        pid_t pid = fork();
+        if (pid < 0) {
+          fprintf(stderr, "Failed to create backup\n");
+        }
 
-            // create and open the backup file
-            int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if(fdBck == -1){
-              fprintf(stderr, "Failed to open backup file\n");
+        if (pthread_rwlock_unlock(&globalHashLock) ||
+            pthread_mutex_unlock(&threadMutex)) {
+          fprintf(stderr, "Failed to unlock global hash lock\n");
+        }
+        // END OF CRITICAL SECTION HASHTABLE
 
-                pthread_mutex_destroy(&backupCounterMutex); // TODO estes locks nao podem estar no if porque nao temos
-                                                            // maneira de saber se estao locked ou nao antes de tentarmos destruilos
-                
-              if (pthread_rwlock_destroy(&globalHashLock) ||
-                  pthread_mutex_destroy(&threadMutex) ||
-                  kvs_terminate()||
-                  close(fd) < 0 ||
-                  close(fdOut) < 0 ||
-                  closedir(dir) < 0) {
-                fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
-              }
-              exit(1);
-            }
+        // child process
+        else if (pid == 0) {
+          // create file path for backup
+          char bckPath[PATH_MAX];
+          snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck",
+                   (int)(strlen(filePath) - 4), filePath, totalBck);
 
-            // perform kvs backup
-            if (kvs_backup(fdBck)) {  
-              fprintf(stderr, "Failed to perform backup.\n");
-            }
-            
-            // terminate child
-            
-            pthread_mutex_destroy(&backupCounterMutex); // TODO estes locks nao podem estar no if porque nao temos
-                   // maneira de saber se estao locked ou nao antes de tentarmos destruilos
-            
+          // create and open the backup file
+          int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          if (fdBck == -1) {
+            fprintf(stderr, "Failed to open backup file\n");
+
+            pthread_mutex_destroy(
+                &backupCounterMutex); // TODO estes locks nao podem estar no if
+                                      // porque nao temos maneira de saber se
+                                      // estao locked ou nao antes de tentarmos
+                                      // destruilos
+
             if (pthread_rwlock_destroy(&globalHashLock) ||
-                pthread_mutex_destroy(&threadMutex) ||     
-                kvs_terminate()||
-                close(fd) < 0 ||
-                close(fdOut) < 0 ||
-                closedir(dir) < 0) {
-              fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
+                pthread_mutex_destroy(&threadMutex) || kvs_terminate() ||
+                close(fd) < 0 || close(fdOut) < 0 || closedir(dir) < 0) {
+              fprintf(stderr, "Failed to close resources: %s\n",
+                      strerror(errno));
             }
-            _exit(0);
+            exit(1);
           }
 
-          // father process
-          else{
-            totalBck++;
+          // perform kvs backup
+          if (kvs_backup(fdBck)) {
+            fprintf(stderr, "Failed to perform backup.\n");
           }
-          break;
 
-        case CMD_INVALID:
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          break;
+          // terminate child
 
-        case CMD_HELP:
-          printf( 
-              "Available commands:\n"
-              "  WRITE [(key,value)(key2,value2),...]\n"
-              "  READ [key,key2,...]\n"
-              "  DELETE [key,key2,...]\n"
-              "  SHOW\n"
-              "  WAIT <delay_ms>\n"
-              "  BACKUP\n"
-              "  HELP\n"
-          );
-          break;
-          
-        case CMD_EMPTY:
-          break;
+          pthread_mutex_destroy(
+              &backupCounterMutex); // TODO estes locks nao podem estar no if
+                                    // porque nao temos maneira de saber se
+                                    // estao locked ou nao antes de tentarmos
+                                    // destruilos
 
-        case EOC:
-          if (close(fd) < 0 ||
-              close(fdOut) < 0) {
-            fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
+          if (pthread_rwlock_destroy(&globalHashLock) ||
+              pthread_mutex_destroy(&threadMutex) || kvs_terminate() ||
+              close(fd) < 0 || close(fdOut) < 0 || closedir(dir) < 0) {
+            fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
           }
-          if (pthread_mutex_lock(&threadMutex)) {
-            fprintf(stderr, "Failed to lock mutex\n");
-          }
-          eocFlag = 1;
-          break;
+          _exit(0);
+        }
+
+        // father process
+        else {
+          totalBck++;
+        }
+        break;
+
+      case CMD_INVALID:
+        fprintf(stderr, "Invalid command. See HELP for usage\n");
+        break;
+
+      case CMD_HELP:
+        printf("Available commands:\n"
+               "  WRITE [(key,value)(key2,value2),...]\n"
+               "  READ [key,key2,...]\n"
+               "  DELETE [key,key2,...]\n"
+               "  SHOW\n"
+               "  WAIT <delay_ms>\n"
+               "  BACKUP\n"
+               "  HELP\n");
+        break;
+
+      case CMD_EMPTY:
+        break;
+
+      case EOC:
+        if (close(fd) < 0 || close(fdOut) < 0) {
+          fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
+        }
+        if (pthread_mutex_lock(&threadMutex)) {
+          fprintf(stderr, "Failed to lock mutex\n");
+        }
+        eocFlag = 1;
+        break;
       }
     }
   }
   if (pthread_mutex_unlock(&threadMutex)) {
     fprintf(stderr, "Failed to unlock mutex\n");
-  } 
+  }
   return NULL;
 }
-
 
 int main(int argc, char *argv[]) {
 
   // check if the correct number of arguments was passed
-  if(argc != 4) {
+  if (argc != 4) {
     fprintf(stderr, "Wrong number of arguments\n");
     return 1;
   }
 
-  // parse input arguments  
+  // parse input arguments
   char *directory_path = argv[1];
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
-
   DIR *dir = opendir(directory_path);
 
   // check if the directory exists
-  if(dir == NULL){
+  if (dir == NULL) {
     fprintf(stderr, "Failed to open directory\n");
     return 1;
   }
@@ -315,43 +315,42 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-// initialize locks
-  if (pthread_mutex_init(&backupCounterMutex, NULL)|| 
-      pthread_mutex_init(&threadMutex, NULL)|| 
+  // initialize locks
+  if (pthread_mutex_init(&backupCounterMutex, NULL) ||
+      pthread_mutex_init(&threadMutex, NULL) ||
       pthread_rwlock_init(&globalHashLock, NULL)) {
-      fprintf(stderr, "Failed to initialize lock: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to initialize lock: %s\n", strerror(errno));
   }
 
-// create threads
+  // create threads
   pthread_t thread[MAX_THREADS];
   struct ThreadArgs args = {dir, directory_path, &backupCounter};
-  for(unsigned int i = 0; i < MAX_THREADS; i++){
+  for (unsigned int i = 0; i < MAX_THREADS; i++) {
     if (pthread_create(&thread[i], NULL, process_thread, (void *)&args)) {
       fprintf(stderr, "Failed to create thread\n");
     }
   }
 
   // joins threads after processing all files in dir
-  for(unsigned int i = 0; i < MAX_THREADS; i++){
+  for (unsigned int i = 0; i < MAX_THREADS; i++) {
     if (pthread_join(thread[i], NULL)) {
       fprintf(stderr, "Failed to join thread\n");
     }
   }
 
   // wait for all child processes to terminate
-  if(pthread_mutex_lock(&backupCounterMutex)){
+  if (pthread_mutex_lock(&backupCounterMutex)) {
     fprintf(stderr, "Failed to lock mutex\n");
   }
-  while(wait(NULL) > 0);
+  while (wait(NULL) > 0)
+    ;
 
-  if (pthread_mutex_unlock(&backupCounterMutex)||
-      closedir(dir)||
-      pthread_mutex_destroy(&backupCounterMutex)||
-      pthread_mutex_destroy(&threadMutex)||
-      pthread_rwlock_destroy(&globalHashLock)||
-      kvs_terminate()) {
+  if (pthread_mutex_unlock(&backupCounterMutex) || closedir(dir) ||
+      pthread_mutex_destroy(&backupCounterMutex) ||
+      pthread_mutex_destroy(&threadMutex) ||
+      pthread_rwlock_destroy(&globalHashLock) || kvs_terminate()) {
     fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
   }
 
   return 0;
-  }
+}
