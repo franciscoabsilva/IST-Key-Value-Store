@@ -263,11 +263,6 @@ int kvs_backup(int fdBck) {
       keyNode = keyNode->next; // Move to the next node
     }
   }
-  for(int i = 0; i < TABLE_SIZE; i++){
-    if (pthread_rwlock_unlock(&kvs_table->bucketLocks[i])) {
-      fprintf(stderr, "Failed to unlock bucket %d\n", i);
-    }
-  }
   if (close(fdBck) < 0) {
     fprintf(stderr, "Failed to close backup file");
     return 1;

@@ -5,8 +5,8 @@
 #include <string.h>
 
 #include <dirent.h>
-#include <fcntl.h> // isto significa file control option, deve ser do fd
-#include <pthread.h> // IMPORTEI ESTES DOIS AQUI COM <> EM VEZ DE ""
+#include <fcntl.h> 
+#include <pthread.h> 
 #include <sys/wait.h>
 #include <errno.h>
 
@@ -105,7 +105,9 @@ void *process_thread(void *arg){
             continue;
           }
 
-          if (kvs_read(num_pairs, keys, fdOut)) {
+          if (pthread_rwlock_rdlock(&globalHashLock) ||
+              kvs_read(num_pairs, keys, fdOut) ||
+              pthread_rwlock_unlock(&globalHashLock)) {
             fprintf(stderr, "Failed to read pair\n");
           }
           break;
@@ -125,7 +127,9 @@ void *process_thread(void *arg){
           break;
 
         case CMD_SHOW:
-          if (kvs_show(fdOut)) {
+          if (pthread_rwlock_rdlock(&globalHashLock) ||
+              kvs_show(fdOut) ||
+              pthread_rwlock_unlock(&globalHashLock)) {
             fprintf(stderr, "Failed to show pairs\n");
           }
           break;
@@ -143,6 +147,7 @@ void *process_thread(void *arg){
           break;
 
         case CMD_BACKUP:
+
         // CRITIAL SECTION BACKUPCOUNTER
           if (pthread_mutex_lock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to lock mutex\n");
@@ -166,6 +171,9 @@ void *process_thread(void *arg){
           if (pthread_mutex_unlock(&backupCounterMutex)) {
             fprintf(stderr, "Failed to unlock mutex\n");
           }
+          if(pthread_mutex_lock(&threadMutex)){
+            fprintf(stderr, "Failed to lock mutex\n");
+          }
           // END OF BACKUPCOUNTER CRITICAL SECTION
           
           // CRITICAL SECTION HASHTABLE
@@ -178,6 +186,9 @@ void *process_thread(void *arg){
 
           if(pthread_rwlock_unlock(&globalHashLock)){
             fprintf(stderr, "Failed to unlock global hash lock\n");
+          }
+          if(pthread_mutex_unlock(&threadMutex)){
+            fprintf(stderr, "Failed to unlock mutex\n");
           }
 
           // END OF CRITICAL SECTION HASHTABLE
