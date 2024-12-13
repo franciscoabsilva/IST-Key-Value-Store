@@ -52,7 +52,6 @@ void *process_thread(void *arg) {
     }
     // END OF CRITICAL SECTION DIR
 
-    // open the file
     int fd = open(filePath, O_RDONLY);
     if (fd < 0) {
       fprintf(stderr, "Failed to open file\n");
@@ -67,7 +66,6 @@ void *process_thread(void *arg) {
     char outPath[PATH_MAX] = "";
     snprintf(outPath, sizeof(basePath) + 4, "%s.out", basePath);
 
-    // opens or creates the output file
     int fdOut = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fdOut == -1) {
       fprintf(stderr, "Failed to open output file");
@@ -80,7 +78,7 @@ void *process_thread(void *arg) {
     size_t num_pairs;
 
     // count the backups already made on this file
-    unsigned int totalBck = 1;
+    unsigned int fileBackups = 1;
 
     int eocFlag = 0;
     while (!eocFlag) {
@@ -156,16 +154,15 @@ void *process_thread(void *arg) {
         if (pthread_mutex_lock(&backupCounterMutex)) {
           fprintf(stderr, "Failed to lock mutex\n");
         }
+
         // backup limit hasn't been reached yet
         if ((*backupCounter) > 0) {
           (*backupCounter)--;
         }
-
         // backup limit has been reached
         else {
           // wait for a child process to terminate
           pid_t terminated_pid;
-
           do {
             terminated_pid = wait(NULL);
           } while (terminated_pid == -1); 
@@ -198,42 +195,25 @@ void *process_thread(void *arg) {
           // create file path for backup
           char bckPath[PATH_MAX];
           snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck",
-                   (int)(strlen(filePath) - 4), filePath, totalBck);
+                   (int)(strlen(filePath) - 4), filePath, fileBackups);
 
-          // create and open the backup file
           int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
           if (fdBck == -1) {
             fprintf(stderr, "Failed to open backup file\n");
 
-            pthread_mutex_destroy(
-                &backupCounterMutex); // TODO estes locks nao podem estar no if
-                                      // porque nao temos maneira de saber se
-                                      // estao locked ou nao antes de tentarmos
-                                      // destruilos
-
-            if (pthread_rwlock_destroy(&globalHashLock) ||
-                pthread_mutex_destroy(&threadMutex) || kvs_terminate() ||
+            if (pthread_rwlock_destroy(&globalHashLock) || kvs_terminate() ||
                 close(fd) < 0 || close(fdOut) < 0 || closedir(dir) < 0) {
               fprintf(stderr, "Failed to close resources\n");
             }
             exit(1);
           }
 
-          // perform kvs backup
           if (kvs_backup(fdBck)) {
             fprintf(stderr, "Failed to perform backup.\n");
           }
 
           // terminate child
-
-          pthread_mutex_destroy(
-              &backupCounterMutex); // TODO estes locks nao podem estar no if
-                                    // porque nao temos maneira de saber se
-                                    // estao locked ou nao antes de tentarmos
-                                    // destruilos
-
-          if (pthread_rwlock_destroy(&globalHashLock) ||
-              pthread_mutex_destroy(&threadMutex) || kvs_terminate() ||
+          if (pthread_rwlock_destroy(&globalHashLock) || kvs_terminate() ||
               close(fd) < 0 || close(fdOut) < 0 || closedir(dir) < 0) {
             fprintf(stderr, "Failed to close resources\n");
           }
@@ -242,7 +222,7 @@ void *process_thread(void *arg) {
 
         // father process
         else {
-          totalBck++;
+          fileBackups++;
         }
         break;
 
@@ -284,26 +264,22 @@ void *process_thread(void *arg) {
 
 int main(int argc, char *argv[]) {
 
-  // check if the correct number of arguments was passed
   if (argc != 4) {
     fprintf(stderr, "Wrong number of arguments\n");
     return 1;
   }
 
-  // parse input arguments
   char *directory_path = argv[1];
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
   DIR *dir = opendir(directory_path);
 
-  // check if the directory exists
   if (dir == NULL) {
     fprintf(stderr, "Failed to open directory\n");
     return 1;
   }
 
-  // initialize the key-value store
   if (kvs_init()) {
     if (closedir(dir)) {
       fprintf(stderr, "Failed to close directory\n");
@@ -312,14 +288,12 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // initialize locks
   if (pthread_mutex_init(&backupCounterMutex, NULL) ||
       pthread_mutex_init(&threadMutex, NULL) ||
       pthread_rwlock_init(&globalHashLock, NULL)) {
     fprintf(stderr, "Failed to initialize lock\n");
   }
 
-  // create threads
   pthread_t thread[MAX_THREADS];
   struct ThreadArgs args = {dir, directory_path, &backupCounter};
   for (unsigned int i = 0; i < MAX_THREADS; i++) {
@@ -327,8 +301,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Failed to create thread\n");
     }
   }
-
-  // joins threads after processing all files in dir
+  
   for (unsigned int i = 0; i < MAX_THREADS; i++) {
     if (pthread_join(thread[i], NULL)) {
       fprintf(stderr, "Failed to join thread\n");

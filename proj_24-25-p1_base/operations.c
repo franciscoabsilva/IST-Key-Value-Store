@@ -39,12 +39,14 @@ int kvs_terminate() {
   return 0;
 }
 
+// Alphabetical comparison of pairs
 int compare_pairs(const void *a, const void *b) {
   const KeyValuePair *pair1 = (const KeyValuePair *)a;
   const KeyValuePair *pair2 = (const KeyValuePair *)b;
   return strcmp(pair1->key, pair2->key);
 }
 
+// Alphabetical comparison of keys
 int compare_keys(const void *a, const void *b) {
   const char *key1 = (const char *)a;
   const char *key2 = (const char *)b;
@@ -123,7 +125,6 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     return 1;
   }
 
-  // Write the sorted pairs
   for (size_t i = 0; i < num_pairs; i++) {
     if (write_pair(kvs_table, pairs[i][0], pairs[i][1])) {
       fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0],
@@ -131,7 +132,6 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     }
   }
 
-  // Unlock all
   if (unlock_list(indexList)) {
     return 1;
   }
@@ -172,7 +172,6 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     fprintf(stderr, "Failed to write to output file");
   }
 
-  // Unlock all
   if (unlock_list(indexList)) {
     return 1;
   }
@@ -214,7 +213,6 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     }
   }
 
-  // Unlock all
   if (unlock_list(indexList)) {
     return 1;
   }
@@ -222,7 +220,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
 }
 
 int kvs_show(int fdOut) {
-  // Lock all table
+  // Lock all keys
   for (int i = 0; i < TABLE_SIZE; i++) {
     if (pthread_rwlock_rdlock(&kvs_table->bucketLocks[i])) {
       fprintf(stderr, "Failed to lock bucket %d\n", i);
@@ -239,11 +237,10 @@ int kvs_show(int fdOut) {
       if (write(fdOut, buffer, strlen(buffer)) < 0) {
         fprintf(stderr, "Failed to write to output file");
       }
-      keyNode = keyNode->next; // Move to the next node
+      keyNode = keyNode->next;
     }
   }
 
-  // Unlock all
   for (int i = 0; i < TABLE_SIZE; i++) {
     if (pthread_rwlock_unlock(&kvs_table->bucketLocks[i])) {
       fprintf(stderr, "Failed to unlock bucket %d\n", i);
@@ -270,7 +267,7 @@ int kvs_backup(int fdBck) {
       if (write(fdBck, buffer, strlen(buffer)) < 0) {
         fprintf(stderr, "Failed to write to backup file");
       }
-      keyNode = keyNode->next; // Move to the next node
+      keyNode = keyNode->next;
     }
   }
   if (close(fdBck) < 0) {

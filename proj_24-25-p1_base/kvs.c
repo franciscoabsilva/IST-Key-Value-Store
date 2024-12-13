@@ -100,22 +100,20 @@ int delete_pair(HashTable *ht, const char *key) {
   while (keyNode != NULL) {
     if (strcmp(keyNode->key, key) == 0) {
       // Key found; delete this node
-      if (prevNode == NULL) {
+      if (prevNode == NULL) { 
         // Node to delete is the first node in the list
-        ht->table[index] =
-            keyNode->next; // Update the table to point to the next node
+        ht->table[index] = keyNode->next; // Update the table to point to the next node
       } else {
         // Node to delete is not the first; bypass it
-        prevNode->next =
-            keyNode->next; // Link the previous node to the next node
+        prevNode->next = keyNode->next; // Link the previous node to the next node
       }
       // Free the memory allocated for the key and value
       free(keyNode->key);
       free(keyNode->value);
       free(keyNode); // Free the key node itself
-      return 0;      // Exit the function
+      return 0; // Exit the function
     }
-    prevNode = keyNode;      // Move prevNode to current node
+    prevNode = keyNode; // Move prevNode to current node
     keyNode = keyNode->next; // Move to the next node
   }
 
