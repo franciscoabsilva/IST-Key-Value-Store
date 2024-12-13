@@ -328,7 +328,8 @@ int main(int argc, char *argv[]) {
 
   while(wait(NULL) > 0);
 
-  if (closedir(dir)||
+  if (pthread_mutex_unlock(&backupCounterMutex)||
+      closedir(dir)||
       pthread_mutex_destroy(&backupCounterMutex)||
       pthread_mutex_destroy(&threadMutex)||
       pthread_rwlock_destroy(&globalHashLock)||

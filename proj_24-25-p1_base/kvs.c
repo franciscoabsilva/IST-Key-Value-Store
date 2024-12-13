@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <errno.h>
 
 
 // Hash function based on key initial.
@@ -26,6 +27,11 @@ struct HashTable* create_hash_table() {
     HashTable *ht = malloc(sizeof(HashTable));
     if (!ht) return NULL;
     ht->bucketLocks = malloc(TABLE_SIZE * sizeof(pthread_rwlock_t));
+    if (!ht->bucketLocks) {
+        fprintf(stderr, "Error: Allocating bucket locks: %s\n", strerror(errno));
+        free(ht);
+        return NULL;
+    }
     for (int i = 0; i < TABLE_SIZE; i++) {
         ht->table[i] = NULL;
         if (pthread_rwlock_init(&ht->bucketLocks[i], NULL)){
@@ -53,8 +59,19 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
 
     // Key not found, create a new key node
     keyNode = malloc(sizeof(KeyNode));
+    if (!keyNode){
+        fprintf(stderr, "Error: Allocating key node: %s\n", strerror(errno));
+        return 1;
+    }
     keyNode->key = strdup(key); // Allocate memory for the key
     keyNode->value = strdup(value); // Allocate memory for the value
+    if (!keyNode->key || !keyNode->value) {
+        fprintf(stderr, "Error: Allocating key or value: %s\n", strerror(errno));
+        free(keyNode->key);
+        free(keyNode->value);
+        free(keyNode);
+        return 1;
+    }
     keyNode->next = ht->table[index]; // Link to existing nodes
     ht->table[index] = keyNode; // Place new key node at the start of the list
     return 0;
