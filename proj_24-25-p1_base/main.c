@@ -5,7 +5,6 @@
 #include <unistd.h>
 
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/wait.h>
@@ -35,7 +34,7 @@ void *process_thread(void *arg) {
 
   // CRITICAL SECTION DIR
   if (pthread_mutex_lock(&threadMutex)) {
-    fprintf(stderr, "Failed to lock mutex: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to lock mutex\n");
   }
   while ((entry = readdir(dir)) != NULL) {
 
@@ -49,7 +48,7 @@ void *process_thread(void *arg) {
     snprintf(filePath, sizeof(filePath), "%s/%s", directory_path,
              entry->d_name);
     if (pthread_mutex_unlock(&threadMutex)) {
-      fprintf(stderr, "Failed to unlock mutex: %s\n", strerror(errno));
+      fprintf(stderr, "Failed to unlock mutex\n");
     }
     // END OF CRITICAL SECTION DIR
 
@@ -215,8 +214,7 @@ void *process_thread(void *arg) {
             if (pthread_rwlock_destroy(&globalHashLock) ||
                 pthread_mutex_destroy(&threadMutex) || kvs_terminate() ||
                 close(fd) < 0 || close(fdOut) < 0 || closedir(dir) < 0) {
-              fprintf(stderr, "Failed to close resources: %s\n",
-                      strerror(errno));
+              fprintf(stderr, "Failed to close resources\n");
             }
             exit(1);
           }
@@ -237,7 +235,7 @@ void *process_thread(void *arg) {
           if (pthread_rwlock_destroy(&globalHashLock) ||
               pthread_mutex_destroy(&threadMutex) || kvs_terminate() ||
               close(fd) < 0 || close(fdOut) < 0 || closedir(dir) < 0) {
-            fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
+            fprintf(stderr, "Failed to close resources\n");
           }
           _exit(0);
         }
@@ -268,7 +266,7 @@ void *process_thread(void *arg) {
 
       case EOC:
         if (close(fd) < 0 || close(fdOut) < 0) {
-          fprintf(stderr, "Failed to close file: %s\n", strerror(errno));
+          fprintf(stderr, "Failed to close file\n");
         }
         if (pthread_mutex_lock(&threadMutex)) {
           fprintf(stderr, "Failed to lock mutex\n");
@@ -318,7 +316,7 @@ int main(int argc, char *argv[]) {
   if (pthread_mutex_init(&backupCounterMutex, NULL) ||
       pthread_mutex_init(&threadMutex, NULL) ||
       pthread_rwlock_init(&globalHashLock, NULL)) {
-    fprintf(stderr, "Failed to initialize lock: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to initialize lock\n");
   }
 
   // create threads
@@ -347,7 +345,7 @@ int main(int argc, char *argv[]) {
       pthread_mutex_destroy(&backupCounterMutex) ||
       pthread_mutex_destroy(&threadMutex) ||
       pthread_rwlock_destroy(&globalHashLock) || kvs_terminate()) {
-    fprintf(stderr, "Failed to close resources: %s\n", strerror(errno));
+    fprintf(stderr, "Failed to close resources\n");
   }
 
   return 0;
