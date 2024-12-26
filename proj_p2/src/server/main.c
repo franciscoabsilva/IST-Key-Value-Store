@@ -263,14 +263,22 @@ void *process_thread(void *arg) {
 
 int main(int argc, char *argv[]) {
 
-  if (argc != 4) {
-    fprintf(stderr, "Wrong number of arguments\n");
+  if (!(argc == 4 || argc == 5)) {
+    fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max>\
+            [name_registry_FIFO]\n", argv[0]);
     return 1;
   }
 
   char *directory_path = argv[1];
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
+
+  if(argc == 5) {
+    if (!(mkfifo(argv[4], 0666))) { // FIXME???? devia ser 0640????
+      fprintf(stderr, "Failed to create FIFO\n");
+      return 1;
+    }
+  } 
 
   DIR *dir = opendir(directory_path);
 

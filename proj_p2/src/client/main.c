@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
   char resp_pipe_path[256] = "/tmp/resp";
   char notif_pipe_path[256] = "/tmp/notif";
 
+
   char keys[MAX_NUMBER_SUB][MAX_STRING_SIZE] = {0};
   unsigned int delay_ms;
   size_t num;
@@ -30,6 +31,8 @@ int main(int argc, char* argv[]) {
   strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
 
   // TODO open pipes
+  
+
 
   while (1) {
     switch (get_next(STDIN_FILENO)) {
