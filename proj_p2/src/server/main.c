@@ -1,337 +1,326 @@
-#include <unistd.h>
-#include <dirent.h>
-#include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <unistd.h>
+
+#include <dirent.h>
+#include <fcntl.h>
+#include <pthread.h>
 #include <sys/wait.h>
-#include <stdio.h>
 
 #include "constants.h"
-#include "parser.h"
 #include "operations.h"
-#include "io.h"
-#include "pthread.h"
+#include "parser.h"
 
-struct SharedData {
-  DIR* dir;
-  char* dir_name;
-  pthread_mutex_t directory_mutex;
+pthread_mutex_t backupCounterMutex;
+pthread_mutex_t dirMutex;
+pthread_rwlock_t globalHashLock;
+
+struct ThreadArgs {
+  DIR *dir;
+  char *directory_path;
+  unsigned int *backupCounter;
 };
 
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
+void *process_thread(void *arg) {
+  struct ThreadArgs *arg_struct = (struct ThreadArgs *)arg;
+  DIR *dir = arg_struct->dir;
+  char *directory_path = arg_struct->directory_path;
+  unsigned int *backupCounter = arg_struct->backupCounter;
 
-size_t active_backups = 0;     // Number of active backups
-size_t max_backups;            // Maximum allowed simultaneous backups
-size_t max_threads;            // Maximum allowed simultaneous threads
-char* jobs_directory = NULL;
+  struct dirent *entry;
 
-int filter_job_files(const struct dirent* entry) {
-    const char* dot = strrchr(entry->d_name, '.');
-    if (dot != NULL && strcmp(dot, ".job") == 0) {
-        return 1;  // Keep this file (it has the .job extension)
+  // CRITICAL SECTION DIR
+  if (pthread_mutex_lock(&dirMutex)) {
+    fprintf(stderr, "Failed to lock mutex\n");
+  }
+  while ((entry = readdir(dir)) != NULL) {
+
+    // check if the file has the .job extension
+    size_t len = strlen(entry->d_name);
+    if (len < 4 || strcmp(entry->d_name + (len - 4), ".job"))
+      continue;
+
+    char filePath[MAX_JOB_FILE_NAME_SIZE];
+    
+    int lenFilePath = snprintf(filePath, sizeof(filePath), "%s/%s", directory_path,
+                       entry->d_name);
+    
+    if(lenFilePath < 0 || lenFilePath >=  MAX_JOB_FILE_NAME_SIZE) {
+      fprintf(stderr, "Failed to create file path\n");
+      continue;
     }
-    return 0;
-}
 
-static int entry_files(const char* dir, struct dirent* entry, char* in_path, char* out_path) {
-  const char* dot = strrchr(entry->d_name, '.');
-  if (dot == NULL || dot == entry->d_name || strlen(dot) != 4 || strcmp(dot, ".job")) {
-    return 1;
-  }
+    if (pthread_mutex_unlock(&dirMutex)) {
+      fprintf(stderr, "Failed to unlock mutex\n");
+    }
+    // END OF CRITICAL SECTION DIR
 
-  if (strlen(entry->d_name) + strlen(dir) + 2 > MAX_JOB_FILE_NAME_SIZE) {
-    fprintf(stderr, "%s/%s\n", dir, entry->d_name);
-    return 1;
-  }
+    int fd = open(filePath, O_RDONLY);
+    if (fd < 0) {
+      fprintf(stderr, "Failed to open file\n");
+      return NULL;
+    }
 
-  strcpy(in_path, dir);
-  strcat(in_path, "/");
-  strcat(in_path, entry->d_name);
+    // copy the path without the .job extension
+    char basePath[MAX_JOB_FILE_NAME_SIZE] = "";
+    strncpy(basePath, filePath, strlen(filePath) - 4);
 
-  strcpy(out_path, in_path);
-  strcpy(strrchr(out_path, '.'), ".out");
+    // creates the output file path with .out extension
+    char outPath[MAX_JOB_FILE_NAME_SIZE] = "";
+    snprintf(outPath, sizeof(basePath) + 4, "%s.out", basePath);
 
-  return 0;
-}
+    int fdOut = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fdOut == -1) {
+      fprintf(stderr, "Failed to open output file");
+      return NULL;
+    }
 
-static int run_job(int in_fd, int out_fd, char* filename) {
-  size_t file_backups = 0;
-  while (1) {
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     unsigned int delay;
     size_t num_pairs;
 
-    switch (get_next(in_fd)) {
+    // count the backups already made on this file
+    unsigned int fileBackups = 1;
+
+    int eocFlag = 0;
+    while (!eocFlag) {
+      switch (get_next(fd)) {
       case CMD_WRITE:
-        num_pairs = parse_write(in_fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+        num_pairs =
+            parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
         if (num_pairs == 0) {
-          write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-
-        if (kvs_write(num_pairs, keys, values)) {
-          write_str(STDERR_FILENO, "Failed to write pair\n");
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_write(num_pairs, keys, values) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to write pair\n");
         }
         break;
 
       case CMD_READ:
-        num_pairs = parse_read_delete(in_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+        num_pairs =
+            parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
         if (num_pairs == 0) {
-          write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
 
-        if (kvs_read(num_pairs, keys, out_fd)) {
-          write_str(STDERR_FILENO, "Failed to read pair\n");
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_read(num_pairs, keys, fdOut) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to read pair\n");
         }
         break;
 
       case CMD_DELETE:
-        num_pairs = parse_read_delete(in_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+        num_pairs =
+            parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
         if (num_pairs == 0) {
-          write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-
-        if (kvs_delete(num_pairs, keys, out_fd)) {
-          write_str(STDERR_FILENO, "Failed to delete pair\n");
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_delete(num_pairs, keys, fdOut) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to delete pair\n");
         }
         break;
 
       case CMD_SHOW:
-        kvs_show(out_fd);
+        if (pthread_rwlock_rdlock(&globalHashLock) ||
+            kvs_show(fdOut) ||
+            pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to show pairs\n");
+        }
         break;
 
       case CMD_WAIT:
-        if (parse_wait(in_fd, &delay, NULL) == -1) {
-          write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
+        if (parse_wait(fd, &delay, NULL) == -1) {
+          fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
 
         if (delay > 0) {
-          printf("Waiting %d seconds\n", delay / 1000);
+          write(fdOut, "Waiting...\n", 11);
           kvs_wait(delay);
         }
         break;
 
       case CMD_BACKUP:
-        pthread_mutex_lock(&n_current_backups_lock);
-        if (active_backups >= max_backups) {
-          wait(NULL);
-        } else {
-          active_backups++;
-        }
-        pthread_mutex_unlock(&n_current_backups_lock);
-        int aux = kvs_backup(++file_backups, filename, jobs_directory);
 
-        if (aux < 0) {
-            write_str(STDERR_FILENO, "Failed to do backup\n");
-        } else if (aux == 1) {
-          return 1;
+        // CRITIAL SECTION BACKUPCOUNTER
+        if (pthread_mutex_lock(&backupCounterMutex)) {
+          fprintf(stderr, "Failed to lock mutex\n");
+        }
+
+        // backup limit hasn't been reached yet
+        if ((*backupCounter) > 0) {
+          (*backupCounter)--;
+        }
+        // backup limit has been reached
+        else {
+          // wait for a child process to terminate
+          pid_t terminated_pid;
+          do {
+            terminated_pid = wait(NULL);
+          } while (terminated_pid == -1); 
+        }
+
+        if (pthread_mutex_unlock(&backupCounterMutex)) {
+          fprintf(stderr, "Failed to unlock mutex\n");
+        }
+        // END OF BACKUPCOUNTER CRITICAL SECTION
+
+        // CRITICAL SECTION HASHTABLE
+        // (there cant be any type of access that might change the hashtable
+        //  or allocate memory while we are creating a backup)
+        if (pthread_rwlock_wrlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to lock global hash lock\n");
+        }
+
+        // create file path for backup
+        char bckPath[MAX_JOB_FILE_NAME_SIZE];
+        snprintf(bckPath, sizeof(bckPath), "%.*s-%d.bck", 
+                 (int)(strlen(filePath) - 4), filePath, fileBackups);
+
+        pid_t pid = fork();
+
+        if (pid < 0) {
+          fprintf(stderr, "Failed to create backup\n");
+        }
+
+        if (pthread_rwlock_unlock(&globalHashLock)) {
+          fprintf(stderr, "Failed to unlock global hash lock\n");
+        }
+        // END OF CRITICAL SECTION HASHTABLE
+
+
+        // child process
+        else if (pid == 0) {
+          // functions used here have to be async signal safe, since this
+          // fork happens in a multi thread context (see man fork)
+          int fdBck = open(bckPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          kvs_backup(fdBck);
+
+
+          // terminate child
+          pthread_rwlock_destroy(&globalHashLock);
+          kvs_terminate();
+          close(fd);
+          close(fdOut);
+          closedir(dir);
+          _exit(0);
+        }
+
+        // father process
+        else {
+          fileBackups++;
         }
         break;
 
       case CMD_INVALID:
-        write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
+        fprintf(stderr, "Invalid command. See HELP for usage\n");
         break;
 
       case CMD_HELP:
-        write_str(STDOUT_FILENO,
-            "Available commands:\n"
-            "  WRITE [(key,value)(key2,value2),...]\n"
-            "  READ [key,key2,...]\n"
-            "  DELETE [key,key2,...]\n"
-            "  SHOW\n"
-            "  WAIT <delay_ms>\n"
-            "  BACKUP\n" // Not implemented
-            "  HELP\n");
-
+        printf("Available commands:\n"
+               "  WRITE [(key,value)(key2,value2),...]\n"
+               "  READ [key,key2,...]\n"
+               "  DELETE [key,key2,...]\n"
+               "  SHOW\n"
+               "  WAIT <delay_ms>\n"
+               "  BACKUP\n"
+               "  HELP\n");
         break;
 
       case CMD_EMPTY:
         break;
 
       case EOC:
-        printf("EOF\n");
-        return 0;
-    }
-  }
-}
-
-//frees arguments
-static void* get_file(void* arguments) {
-  struct SharedData* thread_data = (struct SharedData*) arguments;
-  DIR* dir = thread_data->dir;
-  char* dir_name = thread_data->dir_name;
-
-  if (pthread_mutex_lock(&thread_data->directory_mutex) != 0) {
-    fprintf(stderr, "Thread failed to lock directory_mutex\n");
-    return NULL;
-  }
-
-  struct dirent* entry;
-  char in_path[MAX_JOB_FILE_NAME_SIZE], out_path[MAX_JOB_FILE_NAME_SIZE];
-  while ((entry = readdir(dir)) != NULL) {
-    if (entry_files(dir_name, entry, in_path, out_path)) {
-      continue;
-    }
-
-    if (pthread_mutex_unlock(&thread_data->directory_mutex) != 0) {
-      fprintf(stderr, "Thread failed to unlock directory_mutex\n");
-      return NULL;
-    }
-
-    int in_fd = open(in_path, O_RDONLY);
-    if (in_fd == -1) {
-      write_str(STDERR_FILENO, "Failed to open input file: ");
-      write_str(STDERR_FILENO, in_path);
-      write_str(STDERR_FILENO, "\n");
-      pthread_exit(NULL);
-    }
-
-    int out_fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (out_fd == -1) {
-      write_str(STDERR_FILENO, "Failed to open output file: ");
-      write_str(STDERR_FILENO, out_path);
-      write_str(STDERR_FILENO, "\n");
-      pthread_exit(NULL);
-    }
-
-    int out = run_job(in_fd, out_fd, entry->d_name);
-
-    close(in_fd);
-    close(out_fd);
-
-    if (out) {
-      if (closedir(dir) == -1) {
-        fprintf(stderr, "Failed to close directory\n");
-        return 0;
+        if (close(fd) < 0 || close(fdOut) < 0) {
+          fprintf(stderr, "Failed to close file\n");
+        }
+        if (pthread_mutex_lock(&dirMutex)) {
+          fprintf(stderr, "Failed to lock mutex\n");
+        }
+        eocFlag = 1;
+        break;
       }
-
-      exit(0);
-    }
-
-    if (pthread_mutex_lock(&thread_data->directory_mutex) != 0) {
-      fprintf(stderr, "Thread failed to lock directory_mutex\n");
-      return NULL;
     }
   }
-
-  if (pthread_mutex_unlock(&thread_data->directory_mutex) != 0) {
-    fprintf(stderr, "Thread failed to unlock directory_mutex\n");
-    return NULL;
+  if (pthread_mutex_unlock(&dirMutex)) {
+    fprintf(stderr, "Failed to unlock mutex\n");
   }
-
-  pthread_exit(NULL);
+  return NULL;
 }
 
+int main(int argc, char *argv[]) {
 
-static void dispatch_threads(DIR* dir) {
-  pthread_t* threads = malloc(max_threads * sizeof(pthread_t));
-
-  if (threads == NULL) {
-    fprintf(stderr, "Failed to allocate memory for threads\n");
-    return;
-  }
-
-  struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
-
-
-  for (size_t i = 0; i < max_threads; i++) {
-    if (pthread_create(&threads[i], NULL, get_file, (void*)&thread_data) != 0) {
-      fprintf(stderr, "Failed to create thread %zu\n", i);
-      pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
-      return;
-    }
-  }
-
-  // ler do FIFO de registo
-
-  for (unsigned int i = 0; i < max_threads; i++) {
-    if (pthread_join(threads[i], NULL) != 0) {
-      fprintf(stderr, "Failed to join thread %u\n", i);
-      pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
-      return;
-    }
-  }
-
-  if (pthread_mutex_destroy(&thread_data.directory_mutex) != 0) {
-    fprintf(stderr, "Failed to destroy directory_mutex\n");
-  }
-
-  free(threads);
-}
-
-
-int main(int argc, char** argv) {
-  if (argc < 4) {
-    write_str(STDERR_FILENO, "Usage: ");
-    write_str(STDERR_FILENO, argv[0]);
-    write_str(STDERR_FILENO, " <jobs_dir>");
-		write_str(STDERR_FILENO, " <max_threads>");
-		write_str(STDERR_FILENO, " <max_backups> \n");
+  if (argc != 4) {
+    fprintf(stderr, "Wrong number of arguments\n");
     return 1;
   }
 
-  jobs_directory = argv[1];
+  char *directory_path = argv[1];
+  unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
+  unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
-  char* endptr;
-  max_backups = strtoul(argv[3], &endptr, 10);
+  DIR *dir = opendir(directory_path);
 
-  if (*endptr != '\0') {
-    fprintf(stderr, "Invalid max_proc value\n");
+  if (dir == NULL) {
+    fprintf(stderr, "Failed to open directory\n");
     return 1;
   }
-
-  max_threads = strtoul(argv[2], &endptr, 10);
-
-  if (*endptr != '\0') {
-    fprintf(stderr, "Invalid max_threads value\n");
-    return 1;
-  }
-
-	if (max_backups <= 0) {
-		write_str(STDERR_FILENO, "Invalid number of backups\n");
-		return 0;
-	}
-
-	if (max_threads <= 0) {
-		write_str(STDERR_FILENO, "Invalid number of threads\n");
-		return 0;
-	}
 
   if (kvs_init()) {
-    write_str(STDERR_FILENO, "Failed to initialize KVS\n");
+    if (closedir(dir)) {
+      fprintf(stderr, "Failed to close directory\n");
+    }
+    fprintf(stderr, "Failed to initialize KVS\n");
     return 1;
   }
 
-  DIR* dir = opendir(argv[1]);
-  if (dir == NULL) {
-    fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
-    return 0;
+  if (pthread_mutex_init(&backupCounterMutex, NULL) ||
+      pthread_mutex_init(&dirMutex, NULL) ||
+      pthread_rwlock_init(&globalHashLock, NULL)) {
+    fprintf(stderr, "Failed to initialize lock\n");
   }
 
-  dispatch_threads(dir);
 
-  if (closedir(dir) == -1) {
-    fprintf(stderr, "Failed to close directory\n");
-    return 0;
+  pthread_t thread[MAX_THREADS];
+  struct ThreadArgs args = {dir, directory_path, &backupCounter};
+  for (unsigned int i = 0; i < MAX_THREADS; i++) {
+    if (pthread_create(&thread[i], NULL, process_thread, (void *)&args)) {
+      fprintf(stderr, "Failed to create thread\n");
+    }
+  }
+  
+  for (unsigned int i = 0; i < MAX_THREADS; i++) {
+    if (pthread_join(thread[i], NULL)) {
+      fprintf(stderr, "Failed to join thread\n");
+    }
   }
 
-  while (active_backups > 0) {
-    wait(NULL);
-    active_backups--;
+  // wait for all child processes to terminate
+  if (pthread_mutex_lock(&backupCounterMutex)) {
+    fprintf(stderr, "Failed to lock mutex\n");
   }
+  
+  while (wait(NULL) > 0);
 
-  kvs_terminate();
+  if (pthread_mutex_unlock(&backupCounterMutex) || closedir(dir) ||
+      pthread_mutex_destroy(&backupCounterMutex) ||
+      pthread_mutex_destroy(&dirMutex) ||
+      pthread_rwlock_destroy(&globalHashLock) || kvs_terminate()) {
+    fprintf(stderr, "Failed to close resources\n");
+  }
 
   return 0;
 }

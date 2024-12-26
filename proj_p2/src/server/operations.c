@@ -1,17 +1,18 @@
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
-#include "constants.h"
 #include "io.h"
+#include "constants.h"
 #include "kvs.h"
-#include "operations.h"
 
 static struct HashTable *kvs_table = NULL;
+typedef struct {
+  char key[MAX_STRING_SIZE];
+  char value[MAX_STRING_SIZE];
+} KeyValuePair;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -35,9 +36,68 @@ int kvs_terminate() {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-
   free_table(kvs_table);
-  kvs_table = NULL;
+  return 0;
+}
+
+// Alphabetical comparison of pairs
+int compare_pairs(const void *a, const void *b) {
+  const KeyValuePair *pair1 = (const KeyValuePair *)a;
+  const KeyValuePair *pair2 = (const KeyValuePair *)b;
+  return strcmp(pair1->key, pair2->key);
+}
+
+// Alphabetical comparison of keys
+int compare_keys(const void *a, const void *b) {
+  const char *key1 = (const char *)a;
+  const char *key2 = (const char *)b;
+  return strcmp(key1, key2);
+}
+
+int lock_write_list(size_t num_pairs, char keys[][MAX_STRING_SIZE],
+                    int indexList[]) {
+  for (size_t i = 0; i < num_pairs; i++) {
+    int index = hash(keys[i]);
+
+    // If that index still hasn't been locked
+    if (indexList[index] == 0) {
+      if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
+        fprintf(stderr, "Failed to lock bucket %d\n", index);
+        return 1;
+      }
+      indexList[index] = 1;
+    }
+  }
+  return 0;
+}
+
+int lock_read_list(size_t num_pairs, char keys[][MAX_STRING_SIZE],
+                   int indexList[]) {
+  for (size_t i = 0; i < num_pairs; i++) {
+    int index = hash(keys[i]);
+
+    // If that index still hasn't been locked
+    if (indexList[index] == 0) {
+      if (pthread_rwlock_rdlock(&kvs_table->bucketLocks[index])) {
+        fprintf(stderr, "Failed to lock bucket %d\n", index);
+        return 1;
+      }
+      indexList[index] = 1;
+    }
+  }
+  return 0;
+}
+
+int unlock_list(int indexList[]) {
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    if (indexList[i] == 1) {
+      if (pthread_rwlock_unlock(&kvs_table->bucketLocks[i])) {
+        fprintf(stderr, "Failed to unlock bucket %d\n", i);
+        return 1;
+      }
+      indexList[i] = 0;
+    }
+  }
   return 0;
 }
 
@@ -48,128 +108,172 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     return 1;
   }
 
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+  // Sort the pairs alphabetically
+  char pairs[num_pairs][2][MAX_STRING_SIZE];
+  for (size_t i = 0; i < num_pairs; i++) {
+    strcpy(pairs[i][0], keys[i]);
+    strcpy(pairs[i][1], values[i]);
+  }
+  qsort(pairs, num_pairs, sizeof(pairs[0]), compare_pairs);
+  char sortedKeys[num_pairs][MAX_STRING_SIZE];
+  for (size_t i = 0; i < num_pairs; i++) {
+    strcpy(sortedKeys[i], pairs[i][0]);
+  }
+
+  // Lock all meaningful keys
+  int indexList[TABLE_SIZE] = {0};
+  if (lock_write_list(num_pairs, sortedKeys, indexList)) {
+    return 1;
+  }
 
   for (size_t i = 0; i < num_pairs; i++) {
-    if (write_pair(kvs_table, keys[i], values[i]) != 0) {
-      fprintf(stderr, "Failed to write key pair (%s,%s)\n", keys[i], values[i]);
+    if (write_pair(kvs_table, pairs[i][0], pairs[i][1])) {
+      fprintf(stderr, "Failed to write keypair (%s,%s)\n", pairs[i][0],
+              pairs[i][1]);
     }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  if (unlock_list(indexList)) {
+    return 1;
+  }
   return 0;
 }
 
-int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
+int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-  
-  pthread_rwlock_rdlock(&kvs_table->tablelock);
+  qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
 
-  write_str(fd, "[");
+  // Lock all meaningful keys
+  int indexList[TABLE_SIZE] = {0};
+  if (lock_read_list(num_pairs, keys, indexList)) {
+    return 1;
+  }
+  if (write(fdOut, "[", 1) < 0) {
+    fprintf(stderr, "Failed to write to output file");
+  }
   for (size_t i = 0; i < num_pairs; i++) {
+    char buffer[MAX_WRITE_SIZE];
     char *result = read_pair(kvs_table, keys[i]);
-    char aux[MAX_STRING_SIZE];
+
     if (result == NULL) {
-      snprintf(aux, MAX_STRING_SIZE, "(%s,KVSERROR)", keys[i]);
+      snprintf(buffer, sizeof(buffer), "(%s,KVSERROR)", keys[i]);
     } else {
-      snprintf(aux, MAX_STRING_SIZE, "(%s,%s)", keys[i], result);
+      snprintf(buffer, sizeof(buffer), "(%s,%s)", keys[i], result);
     }
-    write_str(fd, aux);
+
+    if (write(fdOut, buffer, strlen(buffer)) < 0) {
+      fprintf(stderr, "Failed to write to output file");
+    }
     free(result);
   }
-  write_str(fd, "]\n");
-  
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  if (write(fdOut, "]\n", 2) < 0) {
+    fprintf(stderr, "Failed to write to output file");
+  }
+
+  if (unlock_list(indexList)) {
+    return 1;
+  }
   return 0;
 }
 
-int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
+int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-  
-  pthread_rwlock_wrlock(&kvs_table->tablelock);
+  qsort(keys, num_pairs, MAX_STRING_SIZE, compare_keys);
+
+  // Lock all meaningful keys
+  int indexList[TABLE_SIZE] = {0};
+  if (lock_write_list(num_pairs, keys, indexList)) {
+    return 1;
+  }
 
   int aux = 0;
   for (size_t i = 0; i < num_pairs; i++) {
+    if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
-        write_str(fd, "[");
+        if (write(fdOut, "[", 1) < 0) {
+          fprintf(stderr, "Failed to write to output file");
+        }
         aux = 1;
       }
-      char str[MAX_STRING_SIZE];
-      snprintf(str, MAX_STRING_SIZE, "(%s,KVSMISSING)", keys[i]);
-      write_str(fd, str);
+      char buffer[MAX_WRITE_SIZE];
+      snprintf(buffer, sizeof(buffer), "(%s,KVSMISSING)", keys[i]);
+      if (write(fdOut, buffer, strlen(buffer)) < 0) {
+        fprintf(stderr, "Failed to write to output file");
+      }
+    }
   }
   if (aux) {
-    write_str(fd, "]\n");
+    if (write(fdOut, "]\n", 2) < 0) {
+      fprintf(stderr, "Failed to write to output file");
+    }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  if (unlock_list(indexList)) {
+    return 1;
+  }
   return 0;
 }
 
-void kvs_show(int fd) {
-  if (kvs_table == NULL) {
-    fprintf(stderr, "KVS state must be initialized\n");
-    return;
-  }
-  
-  pthread_rwlock_rdlock(&kvs_table->tablelock);
-  char aux[MAX_STRING_SIZE];
-  
+int kvs_show(int fdOut) {
+  // Lock all keys
   for (int i = 0; i < TABLE_SIZE; i++) {
-    KeyNode *keyNode = kvs_table->table[i]; // Get the next list head
-    while (keyNode != NULL) {
-      snprintf(aux, MAX_STRING_SIZE, "(%s, %s)\n", keyNode->key, keyNode->value);
-      write_str(fd, aux);
-      keyNode = keyNode->next; // Move to the next node of the list
+    if (pthread_rwlock_rdlock(&kvs_table->bucketLocks[i])) {
+      fprintf(stderr, "Failed to lock bucket %d\n", i);
+      return 1;
     }
   }
 
-  pthread_rwlock_unlock(&kvs_table->tablelock);
+  char buffer[MAX_WRITE_SIZE];
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    KeyNode *keyNode = kvs_table->table[i];
+    while (keyNode != NULL) {
+      snprintf(buffer, sizeof(buffer), "(%s, %s)\n", keyNode->key,
+               keyNode->value);
+      if (write(fdOut, buffer, strlen(buffer)) < 0) {
+        fprintf(stderr, "Failed to write to output file");
+      }
+      keyNode = keyNode->next;
+    }
+  }
+
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    if (pthread_rwlock_unlock(&kvs_table->bucketLocks[i])) {
+      fprintf(stderr, "Failed to unlock bucket %d\n", i);
+      return 1;
+    }
+  }
+  return 0;
 }
 
-int kvs_backup(size_t num_backup,char* job_filename , char* directory) {
-  pid_t pid;
-  char bck_name[50];
-  snprintf(bck_name, sizeof(bck_name), "%s/%s-%ld.bck", directory, strtok(job_filename, "."),
-           num_backup);
-
-  pthread_rwlock_rdlock(&kvs_table->tablelock);
-  pid = fork();
-  pthread_rwlock_unlock(&kvs_table->tablelock);
-  if (pid == 0) {
-    // functions used here have to be async signal safe, since this
-    // fork happens in a multi thread context (see man fork)
-    int fd = open(bck_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    for (int i = 0; i < TABLE_SIZE; i++) {
-      KeyNode *keyNode = kvs_table->table[i]; // Get the next list head
-      while (keyNode != NULL) {
-        char aux[MAX_STRING_SIZE];
-        aux[0] = '(';
-        size_t num_bytes_copied = 1; // the "("
-        // the - 1 are all to leave space for the '/0'
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        keyNode->key, MAX_STRING_SIZE - num_bytes_copied - 1);
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        ", ", MAX_STRING_SIZE - num_bytes_copied - 1);
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        keyNode->value, MAX_STRING_SIZE - num_bytes_copied - 1);
-        num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
-                                        ")\n", MAX_STRING_SIZE - num_bytes_copied - 1);
-        aux[num_bytes_copied] = '\0';
-        write_str(fd, aux);
-        keyNode = keyNode->next; // Move to the next node of the list
-      }
+int kvs_backup(int fdBck) {
+  for (int i = 0; i < TABLE_SIZE; i++) {
+    KeyNode *keyNode = kvs_table->table[i];
+    while (keyNode != NULL) {
+      char aux[MAX_STRING_SIZE];
+      aux[0] = '(';
+      size_t num_bytes_copied = 1; // the "("
+      // the - 1 are all to leave space for the '/0'
+      num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
+                                      keyNode->key, MAX_STRING_SIZE - num_bytes_copied - 1);
+      num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
+                                      ", ", MAX_STRING_SIZE - num_bytes_copied - 1);
+      num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
+                                      keyNode->value, MAX_STRING_SIZE - num_bytes_copied - 1);
+      num_bytes_copied += strn_memcpy(aux + num_bytes_copied,
+                                      ")\n", MAX_STRING_SIZE - num_bytes_copied - 1);
+      aux[num_bytes_copied] = '\0';
+      write_str(fdBck, aux);
+      keyNode = keyNode->next;
     }
-    exit(1);
-  } else if (pid < 0) {
-    return -1;
   }
+  close(fdBck);
+
   return 0;
 }
 
