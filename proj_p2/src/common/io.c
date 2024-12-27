@@ -66,7 +66,7 @@ int write_all(int fd, const void *buffer, size_t size) {
     }
     bytes_written += (size_t)result;
   }
-  return 1;
+  return 1;  
 }
 
 static struct timespec delay_to_timespec(unsigned int delay_ms) {

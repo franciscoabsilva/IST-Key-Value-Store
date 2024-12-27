@@ -273,12 +273,18 @@ int main(int argc, char *argv[]) {
   unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
+  // OPEN REGISTRY FIFO
   if(argc == 5) {
     if (!(mkfifo(argv[4], 0666))) { // FIXME???? devia ser 0640????
       fprintf(stderr, "Failed to create FIFO\n");
       return 1;
     }
-  } 
+  }
+  open(argv[4], O_RDONLY);
+
+  // TODO: create master thread to deal with the registry FIFO 
+  // (open fifo in master thread? hm maybe idk)
+  // is master thread this running main? (probably, ups)
 
   DIR *dir = opendir(directory_path);
 

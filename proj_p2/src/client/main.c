@@ -30,9 +30,35 @@ int main(int argc, char* argv[]) {
   strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
 
-  // TODO open pipes
-  
+  // ???? EXPLICAÇÃO: abrir o notif_pipe_path para leitura para que no kvs connect
+  // posssamos ler do pipe e saber se o pedido de inicio de sessao (feito pelo registryPipe) foi aceite
+  if(!mkfifo(notif_pipe_path, 0666)){
+    fprintf(stderr, "Client could not create notification pipe.\n");
+    return 1;
+  }  
 
+  int fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
+  if(fdNotificationPipe < 0) {
+    fprintf(stderr, "Client could not open notification pipe.\n");
+    return 1;
+  }
+  
+  if (kvs_connect(req_pipe_path, resp_pipe_path, argv[3], notif_pipe_path, fdNotificationPipe) != 0) {
+    fprintf(stderr, "Failed to connect to the server\n");
+    return 1;
+  }
+
+  // Open the 2 remaing Client Pipes
+  int fdRequestPipe = open(req_pipe_path, O_WRONLY);
+  if(fdRequestPipe < 0) {
+    fprintf(stderr, "Client could not open request pipe.\n");
+    return 1;
+  }
+  int fdResponsePipe = open(resp_pipe_path, O_RDONLY);
+  if(fdResponsePipe < 0) {
+    fprintf(stderr, "Client could not open response pipe.\n");
+    return 1;
+  }
 
   while (1) {
     switch (get_next(STDIN_FILENO)) {
