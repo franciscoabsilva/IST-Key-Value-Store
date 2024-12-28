@@ -7,3 +7,4 @@
 
 // MARTA CENAS
 #define SIZE_REGISTRY_PIPE 1 + 40 + 40 + 40 // opcode + pedidos + respostas + notificacoes
+#define SIZE_READ_NOTIF_PIPE 41 + 41// ???? por vetor 

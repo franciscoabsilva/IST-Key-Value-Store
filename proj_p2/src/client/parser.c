@@ -7,11 +7,11 @@
 
 #include "src/common/constants.h"
 
-// Reads a string and indicates the position from where it was
-// extracted, based on the KVS specification.
-// @param fd File to read from.
-// @param buffer To write the string in.
-// @param max Maximum string size.
+/// Reads a string and indicates the position from where it was
+/// extracted, based on the KVS specification.
+/// @param fd File to read from.
+/// @param buffer To write the string in.
+/// @param max Maximum string size.
 static int read_string(int fd, char *buffer, size_t max) {
   ssize_t bytes_read;
   char ch;
