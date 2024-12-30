@@ -89,7 +89,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
 
   return 0;
 }
-/*
+
 int kvs_disconnect(void) {
   // close pipes and unlink pipe files
   return 0;
@@ -103,6 +103,6 @@ int kvs_subscribe(const char* key) {
 int kvs_unsubscribe(const char* key) {
     // send unsubscribe message to request pipe and wait for response in response pipe
   return 0;
-}*/
+}
 
 
