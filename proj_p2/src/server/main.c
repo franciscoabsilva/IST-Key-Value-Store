@@ -282,13 +282,12 @@ int main(int argc, char *argv[]) {
       return 1;
     }
   }
+
   int fdServerFifo = open(fifo_path, O_RDONLY);
   if (fdServerFifo < 0) {
     fprintf(stderr, "Failed to open FIFO\n");
     return 1;
   }
-  read(fdServerFifo, NULL, 0); // wait for the server to open the FIFO
-
   // TODO: create master thread to deal with the registry FIFO 
   // (open fifo in master thread? hm maybe idk)
   // is master thread this running main? (probably, ups)

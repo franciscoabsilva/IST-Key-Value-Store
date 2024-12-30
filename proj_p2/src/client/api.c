@@ -41,8 +41,8 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
 
   // connect to Server
   // check if the Registry Pipe exists and if it is writable
-  if(!access(server_pipe_path, W_OK)) {
-    fprintf(stderr, "Client could no access registry pipe.\n");
+  if(access(server_pipe_path, W_OK)) {
+    perror("Client could no access registry pipe.\n");
     return 1;
   }
 
@@ -54,15 +54,15 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
 
   // create Client Pipes
   // FIXME check if the permissons needs to be 0666
-  if(!mkfifo(req_pipe_path, 0666)){ 
+  if(mkfifo(req_pipe_path, 0666)){ 
     fprintf(stderr, "Client could not create request pipe.\n");
     return 1;
   }
-  if(!mkfifo(resp_pipe_path, 0666)){
+  if(mkfifo(resp_pipe_path, 0666)){
     fprintf(stderr, "Client could not create response pipe.\n");
     return 1;
   }
-  if(!mkfifo(notif_pipe_path, 0666)){
+  if(mkfifo(notif_pipe_path, 0666)){
     fprintf(stderr, "Client could not create notification pipe.\n");
     return 1;
   }  
