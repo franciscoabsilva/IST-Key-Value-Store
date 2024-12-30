@@ -11,7 +11,7 @@
 
 void* process_notif_thread(void* arg) {
   const int fdNotificationPipe = (int *) arg;
-  while(true){
+  while(1){
     int readingError;
 
     // FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
@@ -74,24 +74,17 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     return 1;
   }
 
-  // FIXME CREATE THREAD FOR NOTIFICATIONS
+  char connectMessage[SIZE_CONNECT_MESSAGE];
+  build_connect_message(connectMessage, req_pipe_path, resp_pipe_path, notif_pipe_path);
 
-  // FIXME send connect message to server!!! 
-
-  // TODO NO "io.c" concatenate_write_registry()-->
-    // (OP_CODE=1 |
-    // (char[40]) nome do pipe do cliente (para pedidos) |
-    // (char[40]) nome do pipe do cliente (para respostas) | 
-    // (char[40]) nome do pipe do cliente (para notificações)
-  char connectMessage[SIZE_REGISTRY_PIPE];
-  // concatenate_write_registry(connectMessage, req_pipe_path, resp_pipe_path, notif_pipe_path);
-  write_all(fdRegistryPipe, connectMessage, SIZE_REGISTRY_PIPE);
-
-  // TODO read from notif_pipe_path to check if the connection was accepted
+  if (write_all(fdRegistryPipe, connectMessage, SIZE_CONNECT_MESSAGE) != 1) {
+    fprintf(stderr, "Failed to write to registry pipe\n");
+    return 1;
+  }
 
   return 0;
 }
- 
+/*
 int kvs_disconnect(void) {
   // close pipes and unlink pipe files
   return 0;
@@ -105,6 +98,6 @@ int kvs_subscribe(const char* key) {
 int kvs_unsubscribe(const char* key) {
     // send unsubscribe message to request pipe and wait for response in response pipe
   return 0;
-}
+}*/
 
 

@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "src/common/constants.h"
+#include "src/common/protocol.h"
 
 /// Reads a string and indicates the position from where it was
 /// extracted, based on the KVS specification.
@@ -190,4 +191,18 @@ int parse_delay(int fd, unsigned int *delay) {
   }
 
   return 0;
+}
+
+void fill_with_nulls(char *dest, const char *src, size_t size) {
+    size_t len = strlen(src);
+    if (len > size) len = size;
+    memcpy(dest, src, len);
+    memset(dest + len, '\0', size - len);
+}
+
+void build_connect_message(char *connectMessage, const char *req_pipe_path, const char *resp_pipe_path, const char *notif_pipe_path) {
+    connectMessage[0] = OP_CODE_CONNECT;
+    fill_with_nulls(connectMessage + 1, req_pipe_path, MAX_PIPE_PATH_LENGTH);
+    fill_with_nulls(connectMessage + 1 + MAX_PIPE_PATH_LENGTH, resp_pipe_path, MAX_PIPE_PATH_LENGTH);
+    fill_with_nulls(connectMessage + 1 + 2 * MAX_PIPE_PATH_LENGTH, notif_pipe_path, MAX_PIPE_PATH_LENGTH);
 }
