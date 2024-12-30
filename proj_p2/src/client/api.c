@@ -7,24 +7,40 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <pthread.h>
 
-/// @brief Connects to a kvs server and creates the client pipes.
-/// @param req_pipe_path 
-/// @param resp_pipe_path 
-/// @param server_pipe_path 
-/// @param notif_pipe_path 
-/// @param notif_pipe 
-/// @return 
+void* process_notif_thread(void* arg) {
+  const int fdNotificationPipe = (int *) arg;
+  while(true){
+    int readingError;
+
+    // FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
+    char buffer[SIZE_READ_NOTIF_PIPE];
+    parselist(fdNotificationPipe, buffer, MAX_NUMBER_SUB, MAX_STRING_SIZE);
+
+    if(readingError){
+      printf("Error reading key from notification pipe\n");
+    }
+
+
+    // FIXME process notifications
+
+  }
+  // FIXME process notifications
+  return NULL;
+}
+
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
-                char const* server_pipe_path, char const* notif_pipe_path, int* notif_pipe) {
+                char const* server_pipe_path, char const* notif_pipe_path,
+                int* fdNotificationPipe) {
 
   // connect to Server
   // check if the Registry Pipe exists and if it is writable
   if(!access(server_pipe_path, W_OK)) {
     fprintf(stderr, "Client could no access registry pipe.\n");
     return 1;
-
   }
+
   int fdRegistryPipe =  open(server_pipe_path, O_WRONLY);
   if(fdRegistryPipe < 0) {
     fprintf(stderr, "Client could not open registry pipe.\n");
@@ -32,7 +48,7 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
   }
 
   // create Client Pipes
-  // FIXME check if the permissons need to be 0666
+  // FIXME check if the permissons needs to be 0666
   if(!mkfifo(req_pipe_path, 0666)){ 
     fprintf(stderr, "Client could not create request pipe.\n");
     return 1;
@@ -41,6 +57,24 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     fprintf(stderr, "Client could not create response pipe.\n");
     return 1;
   }
+  if(!mkfifo(notif_pipe_path, 0666)){
+    fprintf(stderr, "Client could not create notification pipe.\n");
+    return 1;
+  }  
+
+  fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
+  if(fdNotificationPipe < 0) {
+    fprintf(stderr, "Client could not open notification pipe.\n");
+    return 1;
+  }
+
+  pthread_t notificationsThread;
+  if(!pthread_create(&notificationsThread, NULL, process_notif_thread, (void *)fdNotificationPipe)) {
+    fprintf(stderr, "Failed to create thread\n");
+    return 1;
+  }
+
+  // FIXME CREATE THREAD FOR NOTIFICATIONS
 
   // FIXME send connect message to server!!! 
 

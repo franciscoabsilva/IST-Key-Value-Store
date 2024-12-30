@@ -29,22 +29,12 @@ int main(int argc, char* argv[]) {
   strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
+  char* server_pipe_path = argv[2];
 
-  // ???? EXPLICAÇÃO: abrir o notif_pipe_path para leitura para que no kvs connect
-  // posssamos ler do pipe e saber se o pedido de inicio de sessao (feito pelo registryPipe) foi aceite
-  if(!mkfifo(notif_pipe_path, 0666)){
-    fprintf(stderr, "Client could not create notification pipe.\n");
-    return 1;
-  }  
-
-  int fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
-  if(fdNotificationPipe < 0) {
-    fprintf(stderr, "Client could not open notification pipe.\n");
-    return 1;
-  }
-  
-  if (kvs_connect(req_pipe_path, resp_pipe_path, argv[3], notif_pipe_path, fdNotificationPipe) != 0) {
+  int fdNotificationPipe; 
+  if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path, fdNotificationPipe) != 0) {
     fprintf(stderr, "Failed to connect to the server\n");
+    //FIXME TERMINATE SERVER
     return 1;
   }
 
@@ -118,6 +108,7 @@ int main(int argc, char* argv[]) {
 
       case EOC:
         // input should end in a disconnect, or it will loop here forever
+        // FIXME esta tarefa é que termina a fifo de notificações!
         break;
     }
   }
