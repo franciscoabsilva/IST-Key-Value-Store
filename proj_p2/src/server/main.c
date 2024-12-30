@@ -275,8 +275,9 @@ int main(int argc, char *argv[]) {
   unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
 
   // OPEN REGISTRY FIFO
+  const char *fifo_path = argv[4];
   if(argc == 5) {
-    if (!(mkfifo(argv[4], 0666))) { // FIXME???? devia ser 0640????
+    if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
       fprintf(stderr, "Failed to create FIFO\n");
       return 1;
     }
