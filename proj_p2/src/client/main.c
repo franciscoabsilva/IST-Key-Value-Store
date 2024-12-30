@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
   char* server_pipe_path = argv[2];
 
   int fdNotificationPipe; 
-  if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path, fdNotificationPipe) != 0) {
+  if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path, &fdNotificationPipe) != 0) {
     fprintf(stderr, "Failed to connect to the server\n");
     //FIXME TERMINATE SERVER
     return 1;

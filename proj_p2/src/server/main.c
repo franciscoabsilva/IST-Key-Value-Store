@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #include "constants.h"
 #include "operations.h"

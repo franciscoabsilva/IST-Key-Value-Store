@@ -1,4 +1,6 @@
 #include "api.h"
+#include "parser.h"
+#include "src/common/io.h"
 #include "src/common/constants.h"
 #include "src/common/protocol.h"
 
@@ -8,9 +10,12 @@
 #include <fcntl.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
-void* process_notif_thread(void* arg) {
-  const int fdNotificationPipe = (int *) arg;
+
+
+/*void* process_notif_thread(void* arg) {
+  const int fdNotificationPipe = (const int*) arg;
   while(1){
     int readingError;
 
@@ -28,7 +33,7 @@ void* process_notif_thread(void* arg) {
   }
   // FIXME process notifications
   return NULL;
-}
+}*/
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
                 char const* server_pipe_path, char const* notif_pipe_path,
@@ -62,17 +67,17 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     return 1;
   }  
 
-  fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
-  if(fdNotificationPipe < 0) {
+  *fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
+  if(*fdNotificationPipe < 0) {
     fprintf(stderr, "Client could not open notification pipe.\n");
     return 1;
   }
-
-  pthread_t notificationsThread;
+  
+  /*pthread_t notificationsThread;
   if(!pthread_create(&notificationsThread, NULL, process_notif_thread, (void *)fdNotificationPipe)) {
     fprintf(stderr, "Failed to create thread\n");
     return 1;
-  }
+  }*/
 
   char connectMessage[SIZE_CONNECT_MESSAGE];
   build_connect_message(connectMessage, req_pipe_path, resp_pipe_path, notif_pipe_path);
