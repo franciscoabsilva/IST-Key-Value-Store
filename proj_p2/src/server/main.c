@@ -262,32 +262,31 @@ void *process_thread(void *arg) {
   return NULL;
 }
 
-int main(int argc, char *argv[]) {
-
-  if (!(argc == 4 || argc == 5)) {
-    fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max>\
-            [name_registry_FIFO]\n", argv[0]);
-    return 1;
+void *process_host_thread(void *arg) {
+  const char *fifo_path = (const char *)arg;
+  if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
+    fprintf(stderr, "Failed to create FIFO\n");
   }
-
-  char *directory_path = argv[1];
-  unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
-  unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
-
-  // OPEN REGISTRY FIFO
-  const char *fifo_path = argv[4];
-  if(argc == 5) {
-    if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
-      fprintf(stderr, "Failed to create FIFO\n");
-      return 1;
-    }
-  }
-
+  
   int fdServerFifo = open(fifo_path, O_RDONLY);
   if (fdServerFifo < 0) {
     fprintf(stderr, "Failed to open FIFO\n");
+  }
+  return NULL;
+}
+
+int main(int argc, char *argv[]) {
+
+  if (!(argc == 5)) {
+    fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max> [name_registry_FIFO]\n", argv[0]);
     return 1;
   }
+
+  char* directory_path = argv[1];
+  unsigned int backupCounter = (unsigned int)strtoul(argv[2], NULL, 10);
+  unsigned int MAX_THREADS = (unsigned int)strtoul(argv[3], NULL, 10);
+  const char* fifo_path = argv[4];
+
   // TODO: create master thread to deal with the registry FIFO 
   // (open fifo in master thread? hm maybe idk)
   // is master thread this running main? (probably, ups)
@@ -321,13 +320,19 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Failed to create thread\n");
     }
   }
+  pthread_t host_thread;
+  if (pthread_create(&host_thread, NULL, process_host_thread, (void *)fifo_path)) {
+    fprintf(stderr, "Failed to create thread\n");
+  }
   
   for (unsigned int i = 0; i < MAX_THREADS; i++) {
     if (pthread_join(thread[i], NULL)) {
-      fprintf(stderr, "Failed to join thread\n");
+      fprintf(stderr, "Failed to join job thread\n");
     }
   }
-
+  if(pthread_join(host_thread, NULL)){
+    fprintf(stderr, "Failed to join host thread\n");
+  }
   // wait for all child processes to terminate
   if (pthread_mutex_lock(&backupCounterMutex)) {
     fprintf(stderr, "Failed to lock mutex\n");
