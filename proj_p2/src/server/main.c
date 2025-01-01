@@ -13,6 +13,8 @@
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
+#include "src/common/io.h"
+#include "src/common/constants.h"
 
 pthread_mutex_t backupCounterMutex;
 pthread_mutex_t dirMutex;
@@ -262,16 +264,66 @@ void *process_thread(void *arg) {
   return NULL;
 }
 
+int read_connect_message(int fdServerPipe, int* opcode, char* req_pipe, char* resp_pipe, char* notif_pipe){
+  int reading_error = 0;
+   
+  //FIX ME check why do we care about EOF (return of the read_all)
+  read_all(fdServerPipe, opcode, 1, &reading_error);
+  if(reading_error){
+    fprintf(stderr, "Failed to read OP Code from server pipe\n");
+  }
+
+  read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
+  if(reading_error == -1){
+    fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
+  }
+ 
+  read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
+  if(reading_error){
+    fprintf(stderr, "Failed to read responses pipe path from server pipe\n");
+  }
+
+  read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
+  if(reading_error){
+    fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
+  }
+  return 0;
+}
+
 void *process_host_thread(void *arg) {
   const char *fifo_path = (const char *)arg;
   if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
-    fprintf(stderr, "Failed to create FIFO\n");
+    fprintf(stderr, "Failed to create server pipe\n");
   }
-  
-  int fdServerFifo = open(fifo_path, O_RDONLY);
-  if (fdServerFifo < 0) {
-    fprintf(stderr, "Failed to open FIFO\n");
+
+  int fdServerPipe = open(fifo_path, O_RDONLY);
+  if (fdServerPipe < 0) {
+    fprintf(stderr, "Failed to open server pipe\n");
   }
+
+  int opCode[1]; //FIX ME (precisa de +1 para o \0?)
+  char req_pipe[MAX_PIPE_PATH_LENGTH];
+  char resp_pipe[MAX_PIPE_PATH_LENGTH];
+  char notif_pipe[MAX_PIPE_PATH_LENGTH];
+
+  read_connect_message(fdServerPipe, opCode, req_pipe, resp_pipe, notif_pipe);
+
+  int fdNotifPipe = open(notif_pipe, O_WRONLY);
+  if(fdNotifPipe < 0){
+    fprintf(stderr, "Failed to open notifications pipe\n");
+  }
+
+  int fdReqPipe = open(req_pipe, O_RDONLY);
+  if(fdReqPipe < 0){
+    fprintf(stderr, "Failed to open requests pipe\n");
+  }
+
+
+  int fdRespPipe = open(resp_pipe, O_WRONLY);
+  if(fdRespPipe < 0){
+    fprintf(stderr, "Failed to open responses pipe\n");
+  }
+ 
   return NULL;
 }
 

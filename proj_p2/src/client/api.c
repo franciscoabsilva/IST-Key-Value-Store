@@ -12,7 +12,11 @@
 #include <pthread.h>
 #include <sys/stat.h>
 
-
+int write_correct_size(int fd, const char* message, int size){
+  char buffer[size];
+  fill_with_nulls(buffer, message, MAX_PIPE_PATH_LENGTH);
+  return write_all(fd, buffer, MAX_PIPE_PATH_LENGTH);
+}
 
 /*void* process_notif_thread(void* arg) {
   const int fdNotificationPipe = (const int*) arg;
@@ -67,25 +71,43 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     return 1;
   }  
 
+  /*pthread_t notificationsThread;
+  if(!pthread_create(&notificationsThread, NULL, process_notif_thread, (void *)fdNotificationPipe)) {
+    fprintf(stderr, "Failed to create thread\n");
+    return 1;
+  }*/
+  // FIX ME MUTEX NESTA CENA
+  int opcode = OP_CODE_CONNECT;
+
+  if(write_all(fdRegistryPipe, &opcode, 1) == -1){
+    fprintf(stderr, "Error writing connect OP Code on the server pipe\n");
+  }
+
+  if(write_correct_size(fdRegistryPipe, req_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
+    fprintf(stderr, "Error writing requests pipe path on server pipe\n");
+  }
+
+  if(write_correct_size(fdRegistryPipe, resp_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
+    fprintf(stderr, "Error writing responses pipe path on server pipe\n");
+  }
+
+  if(write_correct_size(fdRegistryPipe, notif_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
+    fprintf(stderr, "Error writing notifications pipe path on server pipe\n");
+  }
+  //BYEBYE MUTEX
+
   *fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
   if(*fdNotificationPipe < 0) {
     fprintf(stderr, "Client could not open notification pipe.\n");
     return 1;
   }
   
-  /*pthread_t notificationsThread;
-  if(!pthread_create(&notificationsThread, NULL, process_notif_thread, (void *)fdNotificationPipe)) {
-    fprintf(stderr, "Failed to create thread\n");
-    return 1;
-  }*/
+  //build_connect_message(connectMessage, req_pipe_path, resp_pipe_path, notif_pipe_path);
 
-  char connectMessage[SIZE_CONNECT_MESSAGE];
-  build_connect_message(connectMessage, req_pipe_path, resp_pipe_path, notif_pipe_path);
-
-  if (write_all(fdRegistryPipe, connectMessage, SIZE_CONNECT_MESSAGE) != 1) {
-    fprintf(stderr, "Failed to write to registry pipe\n");
-    return 1;
-  }
+  //if (write_all(fdRegistryPipe, connectMessage, SIZE_CONNECT_MESSAGE) != 1) {
+    //fprintf(stderr, "Failed to write to registry pipe\n");
+    //return 1;
+  //}
 
   return 0;
 }

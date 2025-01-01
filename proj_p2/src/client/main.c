@@ -37,13 +37,13 @@ int main(int argc, char* argv[]) {
     //FIXME TERMINATE SERVER
     return 1;
   }
-
-  // Open the 2 remaing Client Pipes
+  
   int fdRequestPipe = open(req_pipe_path, O_WRONLY);
   if(fdRequestPipe < 0) {
     fprintf(stderr, "Client could not open request pipe.\n");
     return 1;
   }
+
   int fdResponsePipe = open(resp_pipe_path, O_RDONLY);
   if(fdResponsePipe < 0) {
     fprintf(stderr, "Client could not open response pipe.\n");

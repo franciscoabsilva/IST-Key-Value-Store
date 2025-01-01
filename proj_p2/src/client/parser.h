@@ -41,5 +41,4 @@ void fill_with_nulls(char *dest, const char *src, size_t size);
 void build_connect_message(char *connectMessage, const char *req_pipe_path,
                            const char *resp_pipe_path, const char *notif_pipe_path);
 
-
 #endif  // KVS_PARSER_H
