@@ -10,13 +10,20 @@
 /// @param server_pipe_path Path to the name pipe where the server is listening.
 /// @param notif_pipe_path Path to the name pipe for notifications.
 /// @param notif_pipe File descriptor for the name pipe for notifications.
+/// @param req_pipe File descriptor for the name pipe for requests.
+/// @param resp_pipe File descriptor for the name pipe for responses.
 /// @return 0 if the connection was established successfully, 1 otherwise.
-int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path,
-                char const* notif_pipe_path, int* notif_pipe);
+int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
+                char const* server_pipe_path, char const* notif_pipe_path,
+                int* fdNotificationPipe, int* fdRequestPipe, int* fdResponsePipe,
+                int* fdServerPipe);
                 
 /// Disconnects from an KVS server.
 /// @return 0 in case of success, 1 otherwise.
-int kvs_disconnect(void);
+int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
+                   int fdResponsePipe, const char* resp_pipe_path,
+                   int fdNotification, const char* notif_pipe_path,
+                   int fdServerPipe);
 
 /// Requests a subscription for a key
 /// @param key Key to be subscribed

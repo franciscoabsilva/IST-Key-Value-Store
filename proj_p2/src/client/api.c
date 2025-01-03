@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 
+
 int write_correct_size(int fd, const char* message, int size){
   char buffer[size];
   fill_with_nulls(buffer, message, MAX_PIPE_PATH_LENGTH);
@@ -41,7 +42,8 @@ int write_correct_size(int fd, const char* message, int size){
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
                 char const* server_pipe_path, char const* notif_pipe_path,
-                int* fdNotificationPipe) {
+                int* fdNotificationPipe, int* fdRequestPipe, int* fdResponsePipe,
+                int* fdServerPipe) {
 
   // connect to Server
   // check if the Registry Pipe exists and if it is writable
@@ -50,8 +52,8 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     return 1;
   }
 
-  int fdRegistryPipe =  open(server_pipe_path, O_WRONLY);
-  if(fdRegistryPipe < 0) {
+  *fdServerPipe =  open(server_pipe_path, O_WRONLY);
+  if(*fdServerPipe < 0) {
     fprintf(stderr, "Client could not open registry pipe.\n");
     return 1;
   }
@@ -78,20 +80,19 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
   }*/
   // FIX ME MUTEX NESTA CENA
   int opcode = OP_CODE_CONNECT;
-
-  if(write_all(fdRegistryPipe, &opcode, 1) == -1){
+  if(write_all(*fdServerPipe, &opcode, 1) == -1){
     fprintf(stderr, "Error writing connect OP Code on the server pipe\n");
   }
 
-  if(write_correct_size(fdRegistryPipe, req_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
+  if(write_correct_size(*fdServerPipe, req_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
     fprintf(stderr, "Error writing requests pipe path on server pipe\n");
   }
 
-  if(write_correct_size(fdRegistryPipe, resp_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
+  if(write_correct_size(*fdServerPipe, resp_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
     fprintf(stderr, "Error writing responses pipe path on server pipe\n");
   }
 
-  if(write_correct_size(fdRegistryPipe, notif_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
+  if(write_correct_size(*fdServerPipe, notif_pipe_path, MAX_PIPE_PATH_LENGTH) == -1){
     fprintf(stderr, "Error writing notifications pipe path on server pipe\n");
   }
   //BYEBYE MUTEX
@@ -101,7 +102,19 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     fprintf(stderr, "Client could not open notification pipe.\n");
     return 1;
   }
-  
+   
+  *fdRequestPipe = open(req_pipe_path, O_WRONLY);
+  if(*fdRequestPipe < 0) {
+    fprintf(stderr, "Client could not open request pipe.\n");
+    return 1;
+  }
+
+  *fdResponsePipe = open(resp_pipe_path, O_RDONLY);
+  if(*fdResponsePipe < 0) {
+    fprintf(stderr, "Client could not open response pipe.\n");
+    return 1;
+  }
+
   //build_connect_message(connectMessage, req_pipe_path, resp_pipe_path, notif_pipe_path);
 
   //if (write_all(fdRegistryPipe, connectMessage, SIZE_CONNECT_MESSAGE) != 1) {
@@ -112,7 +125,10 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
   return 0;
 }
 
-int kvs_disconnect(void) {
+int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
+                   int fdResponsePipe, const char* resp_pipe_path,
+                   int fdNotification, const char* notif_pipe_path,
+                   int fdServerPipe) {
   // close pipes and unlink pipe files
   return 0;
 }

@@ -318,12 +318,10 @@ void *process_host_thread(void *arg) {
     fprintf(stderr, "Failed to open requests pipe\n");
   }
 
-
   int fdRespPipe = open(resp_pipe, O_WRONLY);
   if(fdRespPipe < 0){
     fprintf(stderr, "Failed to open responses pipe\n");
   }
- 
   return NULL;
 }
 

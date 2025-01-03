@@ -32,28 +32,22 @@ int main(int argc, char* argv[]) {
   char* server_pipe_path = argv[2];
 
   int fdNotificationPipe; 
-  if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path, &fdNotificationPipe) != 0) {
+  int fdRequestPipe;
+  int fdResponsePipe;
+  int fdServerPipe;
+  if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path,
+                  &fdNotificationPipe, &fdRequestPipe, &fdResponsePipe,
+                  &fdServerPipe) != 0) {
     fprintf(stderr, "Failed to connect to the server\n");
     //FIXME TERMINATE SERVER
     return 1;
   }
   
-  int fdRequestPipe = open(req_pipe_path, O_WRONLY);
-  if(fdRequestPipe < 0) {
-    fprintf(stderr, "Client could not open request pipe.\n");
-    return 1;
-  }
-
-  int fdResponsePipe = open(resp_pipe_path, O_RDONLY);
-  if(fdResponsePipe < 0) {
-    fprintf(stderr, "Client could not open response pipe.\n");
-    return 1;
-  }
-
   while (1) {
     switch (get_next(STDIN_FILENO)) {
       case CMD_DISCONNECT:
-        if (kvs_disconnect() != 0) {
+        if (kvs_disconnect(fdRequestPipe, req_pipe_path, fdResponsePipe, resp_pipe_path,
+                           fdNotificationPipe, notif_pipe_path, fdServerPipe) != 0) {
           fprintf(stderr, "Failed to disconnect to the server\n");
           return 1;
         }
