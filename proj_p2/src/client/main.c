@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
           continue;
         }
          
-        if (kvs_subscribe(keys[0])) {
+        if (kvs_subscribe(fdRequestPipe, fdResponsePipe, keys[0])) {
             fprintf(stderr, "Command subscribe failed\n");
         }
 
@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
           continue;
         }
          
-        if (kvs_unsubscribe(keys[0])) {
+        if (kvs_unsubscribe(fdRequestPipe, fdResponsePipe, keys[0])) {
             fprintf(stderr, "Command subscribe failed\n");
         }
 
@@ -103,6 +103,10 @@ int main(int argc, char* argv[]) {
       case EOC:
         // input should end in a disconnect, or it will loop here forever
         // FIXME esta tarefa é que termina a fifo de notificações!
+        kvs_disconnect(fdRequestPipe, req_pipe_path,
+                       fdResponsePipe, resp_pipe_path,
+                       fdNotificationPipe, notif_pipe_path,
+                       fdServerPipe);
         break;
     }
   }

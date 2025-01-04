@@ -6,5 +6,4 @@
 #define MAX_NUMBER_SUB 10
 
 // MARTA CENAS
-#define SIZE_CONNECT_MESSAGE 1 + 40 + 40 + 40 // opcode + pedidos + respostas + notificacoes
-#define SIZE_READ_NOTIF_PIPE 41 + 41// ???? por vetor 
+#define KEY_MESSAGE_SIZE 41
