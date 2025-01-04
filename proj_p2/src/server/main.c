@@ -331,6 +331,9 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
     }
     return 1;
   }
+
+  // ???? apagar
+  fprintf(stdout, "Connected to client: %s\n", req_pipe);
   return 0;
 }
 
@@ -340,6 +343,8 @@ int wait_for_request(int fdReqPipe, int fdNotifPipe, int fdRespPipe, int* status
 
   while(reading_error == 0){
     read_all(fdReqPipe, opcode, 1, &reading_error);
+    fprintf(stdout, "Received OP Code %d\n", *opcode);
+    fprintf(stdout, "Received status %d\n", reading_error);
     if(reading_error == -1){
       fprintf(stderr, "Failed to read OP Code from request pipe\n");
       return 1;
@@ -375,6 +380,31 @@ int wait_for_request(int fdReqPipe, int fdNotifPipe, int fdRespPipe, int* status
   return 0;
 }
 
+int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, int opcode){
+  printf("cheguei somehow\n");
+  switch(opcode){
+    case OP_CODE_CONNECT:
+      break;
+    case OP_CODE_DISCONNECT:
+      break;
+    case OP_CODE_SUBSCRIBE:
+      char key[KEY_MESSAGE_SIZE];
+      int readingError;
+      printf("tens q \n");
+      read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError);
+      if(kvs_subscribe(key, fdNotifPipe, fdRespPipe)){
+        fprintf(stderr, "Failed to subscribe client\n");
+        return 1;
+      }
+      break;
+    case OP_CODE_UNSUBSCRIBE:
+      break;
+    default:
+      break;
+  }
+  return 0;
+}
+
 void *process_host_thread(void *arg) {
   const char *fifo_path = (const char *)arg;
   if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
@@ -392,10 +422,21 @@ void *process_host_thread(void *arg) {
     return NULL;
   }
 
-  int* status = 0;
-  while(*status != CLIENT_TERMINATED){
-    wait_for_request(fdReqPipe, fdNotifPipe, fdRespPipe, status);
+  int readingError;
+  int opcode = 0;
+  if(read_all(fdReqPipe, &opcode, 1, &readingError) == -1){
+    fprintf(stderr, "Failed to read OP Code from requests pipe");
   }
+  // ???? apagar
+  printf("readingStatus: %d\n", readingError);
+  printf("opcode:%d\n", opcode);
+  manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode);
+
+  /*
+  if(status != CLIENT_TERMINATED){
+    wait_for_request(fdReqPipe, fdNotifPipe, fdRespPipe, &status);
+    //kvs_disconnect(fdNotifPipe);
+  }*/
   
   return NULL;
 }

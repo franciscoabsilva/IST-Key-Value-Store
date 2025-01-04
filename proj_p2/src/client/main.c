@@ -42,7 +42,9 @@ int main(int argc, char* argv[]) {
     //FIXME TERMINATE SERVER
     return 1;
   }
-  
+
+  // ???? apagar
+  fprintf(stdout, "Connected to server\n");
   while (1) {
     switch (get_next(STDIN_FILENO)) {
       case CMD_DISCONNECT:
@@ -52,6 +54,7 @@ int main(int argc, char* argv[]) {
           return 1;
         }
         // TODO: end notifications thread
+        //??? apagar
         printf("Disconnected from server\n");
         return 0;
 
@@ -62,10 +65,9 @@ int main(int argc, char* argv[]) {
           continue;
         }
          
-        if (kvs_subscribe(fdRequestPipe, fdResponsePipe, keys[0])) {
+        if (!kvs_subscribe(fdRequestPipe, fdResponsePipe, keys[0])) {
             fprintf(stderr, "Command subscribe failed\n");
         }
-
         break;
 
       case CMD_UNSUBSCRIBE:
