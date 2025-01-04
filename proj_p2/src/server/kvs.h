@@ -53,6 +53,10 @@ int delete_pair(HashTable *ht, const char *key);
 /// @return 0 if successful, 1 if subscriber already exists, -1 if error
 int add_subscriber(KeyNode *keyNode, int fdNotifPipe);
 
+
+
+int remove_subscriber(Subscriber *subscriber, int fdNotifPipe);
+
 /// Frees the subscribers list.
 /// @param sub List of subscribers to be deleted.
 void free_subscribers(Subscriber *sub);

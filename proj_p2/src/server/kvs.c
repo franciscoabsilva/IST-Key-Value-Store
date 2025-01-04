@@ -142,6 +142,21 @@ int add_subscriber(KeyNode *keyNode, int fdNotifPipe){
     return 0;
 }
 
+int remove_subscriber(Subscriber *subscriber, int fdNotifPipe){
+    Subscriber* prev = subscriber;
+    while(subscriber != NULL){
+        if (subscriber->fdNotifPipe == fdNotifPipe){
+            Subscriber* nextSub = subscriber->next;
+            free(subscriber);
+            prev->next = nextSub;
+            return 0; // subscriber existed and was removed
+        }
+        prev = subscriber;
+        subscriber = subscriber->next;
+    }
+    return 1; // subscription not found
+}
+
 void free_subscribers(Subscriber *sub) {
     Subscriber *temp;
     while (sub != NULL) {

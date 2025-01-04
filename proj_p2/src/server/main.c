@@ -337,72 +337,60 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
   return 0;
 }
 
-int wait_for_request(int fdReqPipe, int fdNotifPipe, int fdRespPipe, int* status){
-  int reading_error = 0;
-  int* opcode = 0;
-
-  while(reading_error == 0){
-    read_all(fdReqPipe, opcode, 1, &reading_error);
-    fprintf(stdout, "Received OP Code %d\n", *opcode);
-    fprintf(stdout, "Received status %d\n", reading_error);
-    if(reading_error == -1){
-      fprintf(stderr, "Failed to read OP Code from request pipe\n");
+/// @brief 
+/// @param fdNotifPipe 
+/// @param fdReqPipe 
+/// @param fdRespPipe 
+/// @param opcode 
+/// @param subscribedKeys 
+/// @param subKeyCount 
+/// @return 1 if CONNECT, SUBSCRIBE, UNSUBSCRIBE, 0 if DISCONNECT, -1 unknown opcode
+int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opcode, 
+                   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], 
+                   int* subKeyCount){
+  switch(opcode){
+    case OP_CODE_CONNECT: {
+      fprintf(stderr, "Client already connected to server.\n");
       return 1;
     }
-  }
 
-  switch (*opcode) {
-    case OP_CODE_DISCONNECT:
-      // clean keys
-      // delete pipes
-      // new use for thread
-      /* code */
-      break;
-
-    case OP_CODE_SUBSCRIBE:
-      char key[KEY_MESSAGE_SIZE];
-      read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &reading_error);
-      if(kvs_subscribe(key, fdNotifPipe, fdRespPipe)){
-        fprintf(stderr, "Failed to subscribe client\n");
-        return 1;
-      }
-      // add to list of subscribers
-      break;
-    case OP_CODE_UNSUBSCRIBE:
-      // remove from list of subscribers
-      *status = CLIENT_TERMINATED;
-      break;
-
-    default:
-      break;
+    case OP_CODE_DISCONNECT: {
+      printf("YUHU KVS DISCONNECT\n");
+      kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+      return 0;
     }
-  
-  return 0;
-}
 
-int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, int opcode){
-  printf("cheguei somehow\n");
-  switch(opcode){
-    case OP_CODE_CONNECT:
-      break;
-    case OP_CODE_DISCONNECT:
-      break;
-    case OP_CODE_SUBSCRIBE:
+    case OP_CODE_SUBSCRIBE:{
+      printf("YUHU KVS SUBSCRIBE\n");
+
       char key[KEY_MESSAGE_SIZE];
       int readingError;
-      printf("tens q \n");
       read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError);
       if(kvs_subscribe(key, fdNotifPipe, fdRespPipe)){
         fprintf(stderr, "Failed to subscribe client\n");
         return 1;
       }
-      break;
-    case OP_CODE_UNSUBSCRIBE:
-      break;
-    default:
-      break;
+      strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
+      (*subKeyCount)++;
+      return 1;
+    }
+
+    case OP_CODE_UNSUBSCRIBE:{
+      printf("YUHU KVS UNUBSCRIBE\n");
+
+      char key[KEY_MESSAGE_SIZE];
+      int readingError;
+      read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError); 
+      // FIXME kvs_unsubscribe would be smarter if found directly from the list of subscriptions
+      kvs_unsubscribe(key, fdNotifPipe, fdRespPipe);
+      // FIXME remove from the list of subscriptions
+      return 1;
+    }
+    default:{
+      fprintf(stderr, "Unrecognized OP Code: %d.\n", opcode);
+      return -1;
+    }
   }
-  return 0;
 }
 
 void *process_host_thread(void *arg) {
@@ -422,22 +410,37 @@ void *process_host_thread(void *arg) {
     return NULL;
   }
 
+  // FIXME ha maneiras melhores de fazer isto
+  char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]; 
+  int countSubscribedKeys = 0;
+
+  int clientStatus = 1;
   int readingError;
   int opcode = 0;
-  if(read_all(fdReqPipe, &opcode, 1, &readingError) == -1){
-    fprintf(stderr, "Failed to read OP Code from requests pipe");
-  }
-  // ???? apagar
-  printf("readingStatus: %d\n", readingError);
-  printf("opcode:%d\n", opcode);
-  manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode);
 
-  /*
-  if(status != CLIENT_TERMINATED){
-    wait_for_request(fdReqPipe, fdNotifPipe, fdRespPipe, &status);
-    //kvs_disconnect(fdNotifPipe);
-  }*/
+  while(clientStatus != CLIENT_TERMINATED){
+    if(read_all(fdReqPipe, &opcode, 1, &readingError) == -1){
+      fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
+    }
+    // ???? apagar
+    printf("readingStatus: %d\n", readingError);
+    printf("opcode:%d\n", opcode);
+    clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
+                                  subscribedKeys, &countSubscribedKeys);
+    if(clientStatus == -1){
+      fprintf(stderr, "Error reading from requests pipe.\n");
+    }
+  }
+
+  if(close(fdServerPipe) < 0){
+    fprintf(stderr, "Client failed to close requests pipe.\n");
+  }
   
+  if(unlink(fifo_path)){
+    fprintf(stderr, "Client failed to unlink requests pipe.\n");
+  }
+
+  printf("end of hostthread\n");
   return NULL;
 }
 
@@ -512,6 +515,7 @@ int main(int argc, char *argv[]) {
       pthread_rwlock_destroy(&globalHashLock) || kvs_terminate()) {
     fprintf(stderr, "Failed to close resources\n");
   }
+  
 
   return 0;
 }

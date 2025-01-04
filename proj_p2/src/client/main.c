@@ -64,7 +64,6 @@ int main(int argc, char* argv[]) {
           fprintf(stderr, "Invalid command. See HELP for usage\n");
           continue;
         }
-         
         if (!kvs_subscribe(fdRequestPipe, fdResponsePipe, keys[0])) {
             fprintf(stderr, "Command subscribe failed\n");
         }

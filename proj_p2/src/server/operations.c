@@ -11,6 +11,7 @@
 #include "src/common/io.h"
 #include "src/common/protocol.h"
 
+
 static struct HashTable *kvs_table = NULL;
 
 typedef struct {
@@ -314,3 +315,58 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
   write_all(fdRespPipe, &result, 1);
   return 0;
 }
+
+int kvs_aux_unsubscribe(const char *key, int fdNotifPipe){
+  int index = hash(key);
+  if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
+    fprintf(stderr, "Failed to lock key %d\n", index);
+  }
+
+  int result = 1; // subscription not found
+  KeyNode *keyNode = kvs_table->table[index];
+  while (keyNode != NULL) {
+      if (strcmp(keyNode->key, key) == 0) {
+        result = remove_subscriber(keyNode->subscriber, fdNotifPipe);
+        break;
+      }
+      keyNode = keyNode->next;
+    }
+  if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
+      fprintf(stderr, "Failed to unlock key %d\n", index);
+  }
+  return result;
+}
+
+int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe){
+  int result = kvs_aux_unsubscribe(key, fdNotifPipe);
+  int opcode = OP_CODE_SUBSCRIBE;
+  if(write_all(fdRespPipe, &opcode, 1) == -1){
+    fprintf(stderr, "Failed to write unsubscribe OP Code on the responses pipe.\n");
+  }
+  if(write_all(fdRespPipe, &result, 1) == -1){
+    fprintf(stderr, "Failed to write unsubscribe result on the responses pipe.\n");
+  }
+  return 0;
+}
+
+
+int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
+                   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]){
+  for(int i = 0; i < subCount; i++ ){
+    kvs_aux_unsubscribe(subscribedKeys[i], fdNotifPipe);
+  }
+  // FIXME COMO DAR RESPOSTA NO DISCONNECT?
+  if(close(fdRespPipe) < 0) {
+    fprintf(stderr, "Failed to close responses pipe.\n");
+  }
+
+  if(close(fdReqPipe) < 0){
+    fprintf(stderr, "Failed to close requests pipe.\n");
+  }
+
+  if(close(fdNotifPipe) < 0){
+    fprintf(stderr, "Failed to close notifications pipe.\n");
+  }
+  return 0;
+}
+
