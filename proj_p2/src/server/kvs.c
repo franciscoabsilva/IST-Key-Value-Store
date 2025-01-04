@@ -57,6 +57,7 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
 
     // Key not found, create a new key node
     keyNode = malloc(sizeof(KeyNode));
+    keyNode->subscriber = malloc(sizeof(Subscriber));
     if (!keyNode) {
         fprintf(stderr, "Error: Allocating key node");
         return 1;
@@ -67,6 +68,7 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
         fprintf(stderr, "Error: Allocating key or value");
         free(keyNode->key);
         free(keyNode->value);
+        free_subscribers(keyNode->subscriber);
         free(keyNode);
         return 1;
     }
@@ -111,6 +113,7 @@ int delete_pair(HashTable *ht, const char *key) {
             // Free the memory allocated for the key and value
             free(keyNode->key);
             free(keyNode->value);
+            free_subscribers(keyNode->subscriber);  
             free(keyNode); // Free the key node itself
             return 0; // Exit the function
         }
@@ -121,6 +124,33 @@ int delete_pair(HashTable *ht, const char *key) {
   return 1;
 }
 
+int add_subscriber(KeyNode *keyNode, int fdNotifPipe){
+    while(keyNode->subscriber != NULL){
+        if (keyNode->subscriber->fdNotifPipe == fdNotifPipe){
+            return 1; // Subscriber already exists
+        }
+        keyNode->subscriber = keyNode->subscriber->next;
+    }
+    Subscriber *newSubscriber = malloc(sizeof(Subscriber));
+    if (newSubscriber == NULL) {
+        fprintf(stderr, "Error: Allocating subscriber");
+        return -1;
+    }
+    newSubscriber->fdNotifPipe = fdNotifPipe;
+    newSubscriber->next = keyNode->subscriber;
+    keyNode->subscriber = newSubscriber;
+    return 0;
+}
+
+void free_subscribers(Subscriber *sub) {
+    Subscriber *temp;
+    while (sub != NULL) {
+        temp = sub;
+        sub = sub->next;
+        free(temp);
+    }
+}
+
 void free_table(HashTable *ht) {
     for (int i = 0; i < TABLE_SIZE; i++) {
         KeyNode *keyNode = ht->table[i];
@@ -129,6 +159,7 @@ void free_table(HashTable *ht) {
             keyNode = keyNode->next;
             free(temp->key);
             free(temp->value);
+            free_subscribers(temp->subscriber);
             free(temp);
         }
         if (pthread_rwlock_destroy(&ht->bucketLocks[i])) {

@@ -8,11 +8,11 @@
 #include "constants.h"
 #include "io.h"
 
-// Reads a string and indicates the position from where it was
-// extracted, based on the KVS specification.
-// @param fd File to read from.
-// @param buffer To write the string in.
-// @param max Maximum string size.
+/// Reads a string and indicates the position from where it was
+/// extracted, based on the KVS specification.
+/// @param fd File to read from.
+/// @param buffer To write the string in.
+/// @param max Maximum string size.
 static int read_string(int fd, char *buffer, size_t max) {
   ssize_t bytes_read;
   char ch;
@@ -51,11 +51,11 @@ static int read_string(int fd, char *buffer, size_t max) {
   return value;
 }
 
-// Reads a number and stores it in an unsigned integer
-// variable.
-// @param fd File to read from.
-// @param value To store the number in.
-// @param next Will point to the character succeding the number.
+/// Reads a number and stores it in an unsigned integer
+/// variable.
+/// @param fd File to read from.
+/// @param value To store the number in.
+/// @param next Will point to the character succeding the number.
 static int read_uint(int fd, unsigned int *value, char *next) {
   char buf[16];
 

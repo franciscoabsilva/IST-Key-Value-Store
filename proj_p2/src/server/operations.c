@@ -7,8 +7,12 @@
 #include "io.h"
 #include "constants.h"
 #include "kvs.h"
+#include "src/common/constants.h"
+#include "src/common/io.h"
+#include "src/common/protocol.h"
 
 static struct HashTable *kvs_table = NULL;
+
 typedef struct {
   char key[MAX_STRING_SIZE];
   char value[MAX_STRING_SIZE];
@@ -280,4 +284,33 @@ int kvs_backup(int fdBck) {
 void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
+}
+
+int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
+  int index = hash(key);
+  if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
+    fprintf(stderr, "Failed to lock key %d\n", index);
+    return 1;
+  }
+
+  int result = RESULT_KEY_DOESNT_EXIST; 
+  KeyNode *keyNode = kvs_table->table[index];
+  while (keyNode != NULL) {
+      if (strcmp(keyNode->key, key) == 0) {
+          if(add_subscriber(keyNode, fdNotifPipe) == -1){
+            fprintf(stderr, "Failed to add subscriber\n");
+            //FIXME result = RESULT_ERROR;
+          }
+          result = RESULT_KEY_EXISTS;
+          break;
+        keyNode = keyNode->next;
+    }
+  }
+  if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
+      fprintf(stderr, "Failed to unlock key %d\n", index);
+  }
+  int opcode = OP_CODE_SUBSCRIBE;
+  write_all(fdRespPipe, &opcode, 1);
+  write_all(fdRespPipe, &result, 1);
+  return 0;
 }

@@ -15,6 +15,8 @@
 #include "parser.h"
 #include "src/common/io.h"
 #include "src/common/constants.h"
+#include "src/common/protocol.h"
+
 
 pthread_mutex_t backupCounterMutex;
 pthread_mutex_t dirMutex;
@@ -296,12 +298,12 @@ int read_connect_message(int fdServerPipe, int* opcode, char* req_pipe, char* re
 }
 
 int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe){
-  int opCode[1]; //FIX ME (precisa de +1 para o \0?)
+  int opCode = 0; //FIX ME (precisa de +1 para o \0?)
   char req_pipe[MAX_PIPE_PATH_LENGTH];
   char resp_pipe[MAX_PIPE_PATH_LENGTH];
   char notif_pipe[MAX_PIPE_PATH_LENGTH];
 
-  if(read_connect_message(*fdServerPipe, opCode, req_pipe, resp_pipe, notif_pipe)){
+  if(read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)){
     fprintf(stderr, "Failed to read connect message\n");
     return 1;
   }
@@ -332,6 +334,47 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
   return 0;
 }
 
+int wait_for_request(int fdReqPipe, int fdNotifPipe, int fdRespPipe, int* status){
+  int reading_error = 0;
+  int* opcode = 0;
+
+  while(reading_error == 0){
+    read_all(fdReqPipe, opcode, 1, &reading_error);
+    if(reading_error == -1){
+      fprintf(stderr, "Failed to read OP Code from request pipe\n");
+      return 1;
+    }
+  }
+
+  switch (*opcode) {
+    case OP_CODE_DISCONNECT:
+      // clean keys
+      // delete pipes
+      // new use for thread
+      /* code */
+      break;
+
+    case OP_CODE_SUBSCRIBE:
+      char key[KEY_MESSAGE_SIZE];
+      read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &reading_error);
+      if(kvs_subscribe(key, fdNotifPipe, fdRespPipe)){
+        fprintf(stderr, "Failed to subscribe client\n");
+        return 1;
+      }
+      // add to list of subscribers
+      break;
+    case OP_CODE_UNSUBSCRIBE:
+      // remove from list of subscribers
+      *status = CLIENT_TERMINATED;
+      break;
+
+    default:
+      break;
+    }
+  
+  return 0;
+}
+
 void *process_host_thread(void *arg) {
   const char *fifo_path = (const char *)arg;
   if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
@@ -347,6 +390,11 @@ void *process_host_thread(void *arg) {
   if (connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe)) {
     fprintf(stderr, "Failed to connect to client\n");
     return NULL;
+  }
+
+  int* status = 0;
+  while(*status != CLIENT_TERMINATED){
+    wait_for_request(fdReqPipe, fdNotifPipe, fdRespPipe, status);
   }
   
   return NULL;

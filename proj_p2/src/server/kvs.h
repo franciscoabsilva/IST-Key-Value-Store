@@ -5,10 +5,16 @@
 #include <stddef.h>
 #include <pthread.h>
 
+typedef struct Subscriber {
+  int fdNotifPipe;
+  struct Subscriber *next;
+} Subscriber;
+
 typedef struct KeyNode {
     char *key;
     char *value;
     struct KeyNode *next;
+    Subscriber *subscriber;
 } KeyNode;
 
 typedef struct HashTable {
@@ -40,6 +46,16 @@ char* read_pair(HashTable *ht, const char *key);
 /// @param key Key of the pair to be deleted.
 /// @return 0 if the node was deleted successfully, 1 otherwise.
 int delete_pair(HashTable *ht, const char *key);
+
+/// @brief Adds a subscriber to a key.
+/// @param keyNode To be subscribed.
+/// @param fdNotifPipe fdNotifPipe of the client subscribing.
+/// @return 0 if successful, 1 if subscriber already exists, -1 if error
+int add_subscriber(KeyNode *keyNode, int fdNotifPipe);
+
+/// Frees the subscribers list.
+/// @param sub List of subscribers to be deleted.
+void free_subscribers(Subscriber *sub);
 
 /// Frees the hashtable.
 /// @param ht Hash table to be deleted.
