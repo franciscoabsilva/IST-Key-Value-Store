@@ -12,3 +12,4 @@ enum {
 };
 
 #endif  // COMMON_PROTOCOL_H
+  

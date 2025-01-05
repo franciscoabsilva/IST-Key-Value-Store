@@ -24,6 +24,45 @@ int write_correct_size(int fd, const char* message, size_t size){
   return write_all(fd, buffer, size);
 }
 
+int read_server_response(int fdResponsePipe, int expected_OP_Code, int *result){
+  int opcode = 0;
+  int readingError = 0;
+  if(read_all(fdResponsePipe, &opcode, 1, &readingError) == -1){
+    fprintf(stderr, "Failed to read opcode from responses pipe.\n");
+    return 1;
+  }
+  if(opcode != expected_OP_Code){
+    fprintf(stderr, "OP Code %d does not correspond to the expected OPCode.\n", opcode);
+    return 1;
+  }/*
+  if(read_all(fdResponsePipe, result, 1, &readingError) == -1){
+    fprintf(stderr, "Failed to read disconnect result from responses pipe.\n");
+    return 1;
+  }*/
+  *result = 0;
+  char* opName;
+
+  switch(expected_OP_Code){
+    case OP_CODE_CONNECT: 
+      opName = "connect";
+      break;
+    case OP_CODE_DISCONNECT:
+     opName = "disconnect";
+     break;
+    case OP_CODE_SUBSCRIBE: 
+      opName = "subscribe";
+      break;
+    case OP_CODE_UNSUBSCRIBE:
+      opName = "unsubscribe";
+      break;
+    default:
+      opName = "unknown";
+      break;
+  }
+  fprintf(stdout, "Server returned %d for operation: %s", opcode, opName);
+  return 0;
+}
+
 void *process_notif_thread(void *arg) {
   const int *fdNotificationPipe = (const int *)arg;
   while(1){
@@ -125,11 +164,13 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     return 1;
   }
 
-  //if (write_all(fdRegistryPipe, connectMessage, SIZE_CONNECT_MESSAGE) != 1) {
-    //fprintf(stderr, "Failed to write to registry pipe\n");
-    //return 1;
-  //}
-
+  // read response from server
+  // FIX ME disconnect in case of an error
+  int expected_OP_Code = OP_CODE_CONNECT;
+  int result = 0;
+  if(read_server_response(*fdResponsePipe, expected_OP_Code, &result)){
+    fprintf(stderr, "Failed to read connect message from response pipe.\n");
+  }
   return 0;
 }
 
@@ -137,14 +178,18 @@ int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
                    int fdResponsePipe, const char* resp_pipe_path,
                    int fdNotification, const char* notif_pipe_path,
                    int fdServerPipe) {
-  // FIX ME SHOULD CLOSE NOTIF FIFO
                     
   // send disconnect message to server
   int opcode = OP_CODE_DISCONNECT;                
   if(write_all(fdServerPipe, &opcode, 1) == -1){
     fprintf(stderr, "Error writing disconnect OP Code on the server pipe\n");
   }
-  // should read for response pipe
+
+  // read for response from server
+  int result = 0;
+  if(read_server_response(fdResponsePipe, OP_CODE_DISCONNECT, &result)){
+    fprintf(stderr, "Failed to read disconnect response from server.\n");
+  }
 
   // close pipes and unlink pipe files
   if(close(fdRequestPipe) < 0){
@@ -153,14 +198,6 @@ int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
   
   if(unlink(req_pipe_path)){
     fprintf(stderr, "Client failed to unlink requests pipe.\n");
-  }
-
-  if(close(fdResponsePipe) < 0){
-    fprintf(stderr, "Client failed to close responses pipe.\n");
-  }
-
-  if(unlink(resp_pipe_path)){
-    fprintf(stderr, "Client failed to unlink responses pipe.\n");
   }
 
   if(close(fdNotification) < 0){
@@ -174,6 +211,15 @@ int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
   if(close(fdServerPipe) < 0){
     fprintf(stderr, "Client failed to close server pipe.\n");
   }
+
+  if(close(fdResponsePipe) < 0){
+    fprintf(stderr, "Client failed to close responses pipe.\n");
+  }
+
+  if(unlink(resp_pipe_path)){
+    fprintf(stderr, "Client failed to unlink responses pipe.\n");
+  }
+
   return 0;
 }
 
@@ -192,7 +238,10 @@ int kvs_subscribe(int fdRequestPipe, int fdResponsePipe, const char* key) {
   }
 
   // should read from response pipe
-
+  int result = 0;
+  if(read_server_response(fdResponsePipe, OP_CODE_SUBSCRIBE, &result)){
+    fprintf(stderr, "Failed to read subscribe response from server.\n");
+  }
   return 1;
 }
 
@@ -209,7 +258,10 @@ int kvs_unsubscribe(int fdResquestPipe, int fdResponsePipe, const char* key) {
   }
 
   // should read from response pipe
-  
+  int result = 0;
+  if(read_server_response(fdResponsePipe, OP_CODE_UNSUBSCRIBE, &result)){
+    fprintf(stderr, "Failed to read unsubscribe response from server.\n");
+  }
   return 0;
 }
 

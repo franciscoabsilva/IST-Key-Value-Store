@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #include "constants.h"
 #include "operations.h"
@@ -331,7 +332,6 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
     }
     return 1;
   }
-
   // ???? apagar
   fprintf(stdout, "Connected to client: %s\n", req_pipe);
   return 0;
@@ -349,7 +349,6 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opc
                    char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], 
                    int* subKeyCount){
                 
-  fprintf(stdout, "entered manage req\n");
   switch(opcode){
     case OP_CODE_CONNECT: {
       fprintf(stderr, "Client already connected to server.\n");
@@ -411,12 +410,21 @@ void *process_host_thread(void *arg) {
   printf("Server pipe opened.\n");  // ????
 
 
-  int fdReqPipe, fdRespPipe, fdNotifPipe; 
-  if (connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe)) {
-    fprintf(stderr, "Failed to connect to client\n");
-    return NULL;
+  int fdReqPipe, fdRespPipe, fdNotifPipe;
+  int opcode = OP_CODE_CONNECT;
+  // FIXME isto nao funciona pq se o result for 1 quer dizer que nao ha pipes
+  // e isto deveria so dar return sem mandar notif
+  int result = connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe);
+  if(result == 1){
+    fprintf(stderr, "FIXMEERRORCONNECTO\n");
+    return  NULL;
   }
-  printf("connected to client\n"); // ????
+  if(write_all(fdRespPipe, &opcode, 1) == -1){
+    fprintf(stderr, "Failed to write connect OP Code on the responses pipe.\n");
+  }
+  if(write_all(fdRespPipe, &result, 1) == -1){
+    fprintf(stderr, "Failed to write connect result on the responses pipe.\n");
+  }
 
   // FIXME ha maneiras melhores de fazer isto
   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]; 
@@ -424,14 +432,13 @@ void *process_host_thread(void *arg) {
 
   int clientStatus = 1;
   int readingError;
-  int opcode = 0;
+  opcode = 0;
 
   while(clientStatus != CLIENT_TERMINATED){
     if(read_all(fdReqPipe, &opcode, 1, &readingError) == -1){
       fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
     }
     // ???? apagar
-    printf("readingStatus: %d\n", readingError);
     printf("opcode:%d\n", opcode);
     fflush(stdout);
     clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
@@ -449,11 +456,13 @@ void *process_host_thread(void *arg) {
     fprintf(stderr, "Client failed to unlink requests pipe.\n");
   }
 
+  // ????
   printf("end of hostthread\n");
   return NULL;
 }
 
 int main(int argc, char *argv[]) {
+  signal(SIGPIPE, SIG_IGN);
 
   if (!(argc == 5)) {
     fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max> [name_registry_FIFO]\n", argv[0]);
