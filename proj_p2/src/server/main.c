@@ -78,7 +78,7 @@ void *process_thread(void *arg) {
 
     int fdOut = open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fdOut == -1) {
-      fprintf(stderr, "Failed to open output file");
+      fprintf(stderr, "Failed to open output file.\n");
       return NULL;
     }
 
@@ -348,6 +348,8 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
 int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opcode, 
                    char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], 
                    int* subKeyCount){
+                
+  fprintf(stdout, "entered manage req\n");
   switch(opcode){
     case OP_CODE_CONNECT: {
       fprintf(stderr, "Client already connected to server.\n");
@@ -360,7 +362,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opc
       return 0;
     }
 
-    case OP_CODE_SUBSCRIBE:{
+    case OP_CODE_SUBSCRIBE: {
       printf("YUHU KVS SUBSCRIBE\n");
 
       char key[KEY_MESSAGE_SIZE];
@@ -391,6 +393,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opc
       return -1;
     }
   }
+  return -1;
 }
 
 void *process_host_thread(void *arg) {
@@ -398,17 +401,22 @@ void *process_host_thread(void *arg) {
   if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
     fprintf(stderr, "Failed to create server pipe\n");
   }
+  printf("fifo\n");
 
   int fdServerPipe = open(fifo_path, O_RDONLY);
   if (fdServerPipe < 0) {
     fprintf(stderr, "Failed to open server pipe\n");
   }
 
+  printf("Server pipe opened.\n");  // ????
+
+
   int fdReqPipe, fdRespPipe, fdNotifPipe; 
   if (connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe)) {
     fprintf(stderr, "Failed to connect to client\n");
     return NULL;
   }
+  printf("connected to client\n"); // ????
 
   // FIXME ha maneiras melhores de fazer isto
   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]; 
@@ -425,6 +433,7 @@ void *process_host_thread(void *arg) {
     // ???? apagar
     printf("readingStatus: %d\n", readingError);
     printf("opcode:%d\n", opcode);
+    fflush(stdout);
     clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
                                   subscribedKeys, &countSubscribedKeys);
     if(clientStatus == -1){
@@ -489,6 +498,8 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Failed to create thread\n");
     }
   }
+
+  // create thread that deals with clients
   pthread_t host_thread;
   if (pthread_create(&host_thread, NULL, process_host_thread, (void *)fifo_path)) {
     fprintf(stderr, "Failed to create thread\n");
@@ -499,9 +510,11 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Failed to join job thread\n");
     }
   }
+
   if(pthread_join(host_thread, NULL)){
     fprintf(stderr, "Failed to join host thread\n");
   }
+
   // wait for all child processes to terminate
   if (pthread_mutex_lock(&backupCounterMutex)) {
     fprintf(stderr, "Failed to lock mutex\n");

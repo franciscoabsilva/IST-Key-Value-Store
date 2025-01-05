@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "src/common/io.h"
+#include "src/common/constants.h"
+
 // Hash function based on key initial.
 // @param key Lowercase alphabetical string.
 // @return hash.
@@ -26,7 +29,7 @@ struct HashTable *create_hash_table() {
     if (!ht) return NULL;
     ht->bucketLocks = malloc(TABLE_SIZE * sizeof(pthread_rwlock_t));
     if (!ht->bucketLocks) {
-        fprintf(stderr, "Error: Allocating bucket locks");
+        fprintf(stderr, "Error: Allocating bucket locks.\n");
         free(ht);
         return NULL;
     }
@@ -50,6 +53,7 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
         if (strcmp(keyNode->key, key) == 0) {
             free(keyNode->value);
             keyNode->value = strdup(value);
+            notify_subscribers(keyNode, key, value);
             return 0;
         }
         keyNode = keyNode->next; // Move to the next node
@@ -59,13 +63,19 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
     keyNode = malloc(sizeof(KeyNode));
     keyNode->subscriber = malloc(sizeof(Subscriber));
     if (!keyNode) {
-        fprintf(stderr, "Error: Allocating key node");
+        fprintf(stderr, "Error: Allocating key node.\n");
         return 1;
     }
+    if(!keyNode->subscriber){
+        fprintf(stderr, "Error: Allocating subscriber.\n");
+        free(keyNode);
+        return 1;
+    }
+    keyNode->subscriber = NULL;
     keyNode->key = strdup(key);     // Allocate memory for the key
     keyNode->value = strdup(value); // Allocate memory for the value
     if (!keyNode->key || !keyNode->value) {
-        fprintf(stderr, "Error: Allocating key or value");
+        fprintf(stderr, "Error: Allocating key or value.\n");
         free(keyNode->key);
         free(keyNode->value);
         free_subscribers(keyNode->subscriber);
@@ -102,7 +112,10 @@ int delete_pair(HashTable *ht, const char *key) {
   // Search for the key node
     while (keyNode != NULL) {
         if (strcmp(keyNode->key, key) == 0) {
-            // Key found; delete this node
+            // Key found
+            // Notify clients that the key is being deleted
+            notify_subscribers(keyNode, key, "DELETE");
+            // Delete this node
             if (prevNode == NULL) { 
                 // Node to delete is the first node in the list
                 ht->table[index] = keyNode->next; // Update the table to point to the next node
@@ -120,11 +133,14 @@ int delete_pair(HashTable *ht, const char *key) {
         prevNode = keyNode; // Move prevNode to current node
         keyNode = keyNode->next; // Move to the next node
     }
-
   return 1;
 }
 
-int add_subscriber(KeyNode *keyNode, int fdNotifPipe){
+int add_subscriber(KeyNode *keyNode, int fdNotifPipe){  
+    if (keyNode == NULL) {
+        fprintf(stderr, "Error: KeyNode is NULL.\n");
+        return -1;
+    }
     while(keyNode->subscriber != NULL){
         if (keyNode->subscriber->fdNotifPipe == fdNotifPipe){
             return 1; // Subscriber already exists
@@ -133,7 +149,7 @@ int add_subscriber(KeyNode *keyNode, int fdNotifPipe){
     }
     Subscriber *newSubscriber = malloc(sizeof(Subscriber));
     if (newSubscriber == NULL) {
-        fprintf(stderr, "Error: Allocating subscriber");
+        fprintf(stderr, "Error: Allocating subscriber.\n");
         return -1;
     }
     newSubscriber->fdNotifPipe = fdNotifPipe;
@@ -155,6 +171,19 @@ int remove_subscriber(Subscriber *subscriber, int fdNotifPipe){
         subscriber = subscriber->next;
     }
     return 1; // subscription not found
+}
+
+void notify_subscribers(KeyNode *keyNode, const char* key, const char* value){
+  Subscriber* subscriber = keyNode->subscriber;
+  while(subscriber != NULL){
+    if (write_all(subscriber->fdNotifPipe, key, KEY_MESSAGE_SIZE) == -1) {
+      fprintf(stderr, "Failed to write key to notification pipe.\n");
+    }
+    if (write_all(subscriber->fdNotifPipe, value, KEY_MESSAGE_SIZE) == -1) {
+      fprintf(stderr, "Failed to write value to notification pipe.\n");
+    }
+    subscriber = subscriber->next;
+  }
 }
 
 void free_subscribers(Subscriber *sub) {

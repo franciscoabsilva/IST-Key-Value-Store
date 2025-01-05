@@ -24,26 +24,28 @@ int write_correct_size(int fd, const char* message, size_t size){
   return write_all(fd, buffer, size);
 }
 
-/*void* process_notif_thread(void* arg) {
-  const int fdNotificationPipe = (const int*) arg;
+void *process_notif_thread(void *arg) {
+  const int *fdNotificationPipe = (const int *)arg;
   while(1){
     int readingError;
 
     // FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
-    char buffer[SIZE_READ_NOTIF_PIPE];
-    parselist(fdNotificationPipe, buffer, MAX_NUMBER_SUB, MAX_STRING_SIZE);
-
-    if(readingError){
-      printf("Error reading key from notification pipe\n");
+    char key[KEY_MESSAGE_SIZE];
+    char value[KEY_MESSAGE_SIZE];
+    while(1){
+      read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readingError);
+      if(readingError == -1){
+        printf("Error reading key from notification pipe\n");
+      }
+      read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readingError);
+      if(readingError == -1){
+        printf("Error reading value from notification pipe\n");
+      }
+      fprintf(stdout, "(%s,%s)\n", key, value);
     }
-
-
-    // FIXME process notifications
-
-  }
-  // FIXME process notifications
+ }
   return NULL;
-}*/
+}
 
 int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
                 char const* server_pipe_path, char const* notif_pipe_path,
@@ -105,11 +107,11 @@ int kvs_connect(char const* req_pipe_path, char const* resp_pipe_path,
     fprintf(stderr, "Client could not open notification pipe.\n");
     return 1;
   }
-  /*pthread_t notificationsThread;
-  if(!pthread_create(&notificationsThread, NULL, process_notif_thread, (void *)fdNotificationPipe)) {
+  pthread_t notificationsThread;
+  if(pthread_create(&notificationsThread, NULL, process_notif_thread, (void *)(fdNotificationPipe))) {
     fprintf(stderr, "Failed to create thread\n");
     return 1;
-  }*/
+  }
    
   *fdRequestPipe = open(req_pipe_path, O_WRONLY);
   if(*fdRequestPipe < 0) {

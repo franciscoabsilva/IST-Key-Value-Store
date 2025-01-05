@@ -157,7 +157,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     return 1;
   }
   if (write(fdOut, "[", 1) < 0) {
-    fprintf(stderr, "Failed to write to output file");
+    fprintf(stderr, "Failed to write to output file\n");
   }
   for (size_t i = 0; i < num_pairs; i++) {
     char buffer[MAX_WRITE_SIZE];
@@ -170,12 +170,12 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     }
 
     if (write(fdOut, buffer, strlen(buffer)) < 0) {
-      fprintf(stderr, "Failed to write to output file");
+      fprintf(stderr, "Failed to write to output file\n");
     }
     free(result);
   }
   if (write(fdOut, "]\n", 2) < 0) {
-    fprintf(stderr, "Failed to write to output file");
+    fprintf(stderr, "Failed to write to output file\n");
   }
 
   if (unlock_list(indexList)) {
@@ -202,20 +202,20 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
     if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
         if (write(fdOut, "[", 1) < 0) {
-          fprintf(stderr, "Failed to write to output file");
+          fprintf(stderr, "Failed to write to output file\n");
         }
         aux = 1;
       }
       char buffer[MAX_WRITE_SIZE];
       snprintf(buffer, sizeof(buffer), "(%s,KVSMISSING)", keys[i]);
       if (write(fdOut, buffer, strlen(buffer)) < 0) {
-        fprintf(stderr, "Failed to write to output file");
+        fprintf(stderr, "Failed to write to output file\n");
       }
     }
   }
   if (aux) {
     if (write(fdOut, "]\n", 2) < 0) {
-      fprintf(stderr, "Failed to write to output file");
+      fprintf(stderr, "Failed to write to output file\n");
     }
   }
 
@@ -241,7 +241,7 @@ int kvs_show(int fdOut) {
       snprintf(buffer, sizeof(buffer), "(%s, %s)\n", keyNode->key,
                keyNode->value);
       if (write(fdOut, buffer, strlen(buffer)) < 0) {
-        fprintf(stderr, "Failed to write to output file");
+        fprintf(stderr, "Failed to write to output file.\n");
       }
       keyNode = keyNode->next;
     }
@@ -349,7 +349,6 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe){
   return 0;
 }
 
-
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
                    char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]){
   for(int i = 0; i < subCount; i++ ){
@@ -369,4 +368,3 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
   }
   return 0;
 }
-
