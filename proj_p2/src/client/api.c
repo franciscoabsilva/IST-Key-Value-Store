@@ -81,7 +81,6 @@ void *process_notif_thread(void *arg) {
          || readError == -1){
         return NULL;
       }
-      printf("key %d\n", readError);
       if(read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError) == -1
         || readError == -1){
         return NULL;
@@ -193,13 +192,16 @@ int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
     fprintf(stderr, "Error writing disconnect OP Code on the server pipe\n");
   }
   // read for response from server
-  char result;
-    printf("disconnect response: \n");
+  char result = 'a';
 
   if(read_server_response(fdResponsePipe, OP_CODE_DISCONNECT, &result) == 1){
     fprintf(stderr, "Failed to read disconnect response from server.\n");
   }
+  printf("disconnect response: %c\n", result);
 
+  if(pthread_cancel(notificationsThread)){
+    fprintf(stderr, "Failed to join host thread\n");
+  }
 
   // close pipes and unlink pipe files
   if(close(fdRequestPipe) < 0){
@@ -228,10 +230,6 @@ int kvs_disconnect(int fdRequestPipe, const char* req_pipe_path,
 
   if(unlink(resp_pipe_path)){
     fprintf(stderr, "Client failed to unlink responses pipe.\n");
-  }
-
-  if(pthread_join(notificationsThread, NULL)){
-    fprintf(stderr, "Failed to join host thread\n");
   }
 
   return 0;

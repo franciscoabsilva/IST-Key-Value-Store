@@ -375,7 +375,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
       char key[KEY_MESSAGE_SIZE];
       int readingError;
       read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError);
-      printf("key: %s\n", key); // ????
+      printf("Subscribed key: %s\n", key); // ????
 
       if(kvs_subscribe(key, fdNotifPipe, fdRespPipe)){
         kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
@@ -397,7 +397,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
         kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
         return 0;
       }
-      printf("unsub key %s\n", key); // ????
+      printf("Unsubscribe key %s\n", key); // ????
       // FIXME kvs_unsubscribe would be smarter if found directly from the list of subscriptions
       kvs_unsubscribe(key, fdNotifPipe, fdRespPipe);
       // FIXME remove from the list of subscriptions
@@ -434,7 +434,7 @@ void *process_host_thread(void *arg) {
   // FIXME isto nao funciona pq se o result for 1 quer dizer que nao ha pipes
   // e isto deveria so dar return sem mandar notif
   char result = connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe);
-  printf("conncect result %c\n", result); // ????
+  printf("Connect result %c\n", result); // ????
   // FIXME ha maneiras melhores de fazer isto
   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]; 
   int countSubscribedKeys = 0;
@@ -455,14 +455,13 @@ void *process_host_thread(void *arg) {
   opcode = 'a';
 
   while(clientStatus != CLIENT_TERMINATED){
-    printf("getting ready to read\n"); // ????
     if(read_all(fdReqPipe, &opcode, 1, &readingError) == -1){
       fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
       kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
       return NULL;
     }
     // ???? apagar
-    printf("opcode:%c\n", opcode);
+    printf("Opcode:%c\n", opcode);
     fflush(stdout);
     clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
                                   subscribedKeys, &countSubscribedKeys);

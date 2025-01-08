@@ -369,16 +369,29 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
     kvs_aux_unsubscribe(subscribedKeys[i], fdNotifPipe);
   }
   // FIXME COMO DAR RESPOSTA NO DISCONNECT?
-  if(close(fdRespPipe) < 0) {
-    fprintf(stderr, "Failed to close responses pipe.\n");
-  }
-
+  char opCode;
+  char result = '0';
   if(close(fdReqPipe) < 0){
     fprintf(stderr, "Failed to close requests pipe.\n");
+    result = '1';
   }
 
   if(close(fdNotifPipe) < 0){
     fprintf(stderr, "Failed to close notifications pipe.\n");
+    result = '1';
+  }
+
+  if(write_all(fdRespPipe, &opCode, 1) == -1){
+    fprintf(stderr, "Failed to write disconnect OP Code on the responses pipe.\n");
+    result = '1';
+  }
+
+  if(write_all(fdRespPipe, &result, 1) == -1){
+    fprintf(stderr, "Failed to write disconnect result on the responses pipe.\n");
+  }
+
+  if(close(fdRespPipe) < 0) {
+    fprintf(stderr, "Failed to close responses pipe.\n");
   }
   return 0;
 }
