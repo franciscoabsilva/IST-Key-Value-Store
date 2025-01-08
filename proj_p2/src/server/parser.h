@@ -5,16 +5,16 @@
 #include "constants.h"
 
 enum Command {
-  CMD_WRITE,
-  CMD_READ,
-  CMD_DELETE,
-  CMD_SHOW,
-  CMD_WAIT,
-  CMD_BACKUP,
-  CMD_HELP,
-  CMD_EMPTY,
-  CMD_INVALID,
-  EOC  // End of commands
+	CMD_WRITE,
+	CMD_READ,
+	CMD_DELETE,
+	CMD_SHOW,
+	CMD_WAIT,
+	CMD_BACKUP,
+	CMD_HELP,
+	CMD_EMPTY,
+	CMD_INVALID,
+	EOC  // End of commands
 };
 
 // Parses input from the given file descriptor, according to
@@ -31,7 +31,8 @@ enum Command get_next(int fd);
 /// @param max_string_size Maximum string size allowed.
 /// @return 0 if the command was not parsed successfully, otherwise return the
 //          of pairs parsed.
-size_t parse_write(int fd, char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE], size_t max_pairs, size_t max_string_size);
+size_t parse_write(int fd, char keys[][MAX_STRING_SIZE], char values[][MAX_STRING_SIZE], size_t max_pairs,
+				   size_t max_string_size);
 
 // Parses a READ or a DELETE command.
 // @param fd File descriptor to read from.

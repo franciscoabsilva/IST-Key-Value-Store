@@ -6,13 +6,13 @@
 #include "src/common/constants.h"
 
 enum Command {
-  CMD_DISCONNECT,
-  CMD_SUBSCRIBE,
-  CMD_UNSUBSCRIBE,
-  CMD_DELAY,
-  CMD_EMPTY,
-  CMD_INVALID,
-  EOC  // End of commands
+	CMD_DISCONNECT,
+	CMD_SUBSCRIBE,
+	CMD_UNSUBSCRIBE,
+	CMD_DELAY,
+	CMD_EMPTY,
+	CMD_INVALID,
+	EOC  // End of commands
 };
 
 /// Parses input from the given file descriptor, according to
@@ -38,7 +38,8 @@ size_t parse_list(int fd, char keys[][MAX_STRING_SIZE], size_t max_keys, size_t 
 int parse_delay(int fd, unsigned int *delay);
 
 void fill_with_nulls(char *dest, const char *src, size_t size);
+
 void build_connect_message(char *connectMessage, const char *req_pipe_path,
-                           const char *resp_pipe_path, const char *notif_pipe_path);
+						   const char *resp_pipe_path, const char *notif_pipe_path);
 
 #endif  // KVS_PARSER_H

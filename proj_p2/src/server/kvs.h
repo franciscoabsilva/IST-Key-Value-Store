@@ -6,27 +6,27 @@
 #include <pthread.h>
 
 typedef struct Subscriber {
-  int fdNotifPipe;
-  struct Subscriber *next;
+	int fdNotifPipe;
+	struct Subscriber *next;
 } Subscriber;
 
 typedef struct KeyNode {
-    char *key;
-    char *value;
-    struct KeyNode *next;
-    Subscriber *subscriber;
+	char *key;
+	char *value;
+	struct KeyNode *next;
+	Subscriber *subscriber;
 } KeyNode;
 
 typedef struct HashTable {
-    KeyNode *table[TABLE_SIZE];
-    pthread_rwlock_t *bucketLocks;
+	KeyNode *table[TABLE_SIZE];
+	pthread_rwlock_t *bucketLocks;
 } HashTable;
 
 /// Creates a new KVS hash table.
 /// @return Newly created hash table, NULL on failure
 struct HashTable *create_hash_table();
 
-int hash(const char *key); 
+int hash(const char *key);
 
 // Writes a key value pair in the hash table.
 // @param ht The hash table.
@@ -39,7 +39,7 @@ int write_pair(HashTable *ht, const char *key, const char *value);
 // @param ht The hash table.
 // @param key The key.
 // return the value if found, NULL otherwise.
-char* read_pair(HashTable *ht, const char *key);
+char *read_pair(HashTable *ht, const char *key);
 
 /// Deletes a pair from the table.
 /// @param ht Hash table to read from.
@@ -55,7 +55,7 @@ int add_subscriber(KeyNode *keyNode, int fdNotifPipe);
 
 int remove_subscriber(Subscriber *subscriber, int fdNotifPipe);
 
-void notify_subscribers(KeyNode *keyNode, const char* key, const char* value);
+void notify_subscribers(KeyNode *keyNode, const char *key, const char *value);
 
 /// Frees the subscribers list.
 /// @param sub List of subscribers to be deleted.
