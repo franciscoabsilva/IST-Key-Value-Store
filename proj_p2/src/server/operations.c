@@ -291,10 +291,10 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
   int index = hash(key);
   if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
     fprintf(stderr, "Failed to lock key %d\n", index);
-    return 1;
+    return -1;
   }
 
-  int result = RESULT_KEY_DOESNT_EXIST; 
+  char result = RESULT_KEY_DOESNT_EXIST; 
   KeyNode *keyNode = kvs_table->table[index];
   while (keyNode != NULL) {
       if (strcmp(keyNode->key, key) == 0) {
@@ -308,11 +308,15 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
     }
   }
   if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
-      fprintf(stderr, "Failed to unlock key %d\n", index);
+    fprintf(stderr, "Failed to unlock key %d\n", index);
   }
-  int opcode = OP_CODE_SUBSCRIBE;
-  write_all(fdRespPipe, &opcode, 1);
-  write_all(fdRespPipe, &result, 1);
+  const char opcode = OP_CODE_SUBSCRIBE;
+  if(write_all(fdRespPipe, &opcode, 1) == -1){
+    return -1;
+  }
+  if (write_all(fdRespPipe, &result, 1) == -1){
+    return -1;
+  }
   return 0;
 }
 
@@ -326,6 +330,12 @@ int kvs_aux_unsubscribe(const char *key, int fdNotifPipe){
   KeyNode *keyNode = kvs_table->table[index];
   while (keyNode != NULL) {
       if (strcmp(keyNode->key, key) == 0) {
+        if(keyNode->subscriber == NULL){
+          if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
+            fprintf(stderr, "Failed to unlock key %d\n", index);
+          }
+          return 1;
+        }
         result = remove_subscriber(keyNode->subscriber, fdNotifPipe);
         break;
       }
@@ -338,12 +348,16 @@ int kvs_aux_unsubscribe(const char *key, int fdNotifPipe){
 }
 
 int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe){
+  printf("AAAAAAAAAAAAAAAA\n"); // ????
   int result = kvs_aux_unsubscribe(key, fdNotifPipe);
-  int opcode = OP_CODE_SUBSCRIBE;
+  const char opcode = OP_CODE_UNSUBSCRIBE;
   if(write_all(fdRespPipe, &opcode, 1) == -1){
     fprintf(stderr, "Failed to write unsubscribe OP Code on the responses pipe.\n");
   }
-  if(write_all(fdRespPipe, &result, 1) == -1){
+  char result_char = (char)result; // ???'???
+  printf("result for unsub %c\n", result_char);
+
+  if(write_all(fdRespPipe, &result_char, 1) == -1){
     fprintf(stderr, "Failed to write unsubscribe result on the responses pipe.\n");
   }
   return 0;

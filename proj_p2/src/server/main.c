@@ -267,52 +267,60 @@ void *process_thread(void *arg) {
   return NULL;
 }
 
-int read_connect_message(int fdServerPipe, int* opcode, char* req_pipe, char* resp_pipe, char* notif_pipe){
+int read_connect_message(int fdServerPipe, char* opcode, char* req_pipe, char* resp_pipe, char* notif_pipe){
   int reading_error = 0;
    
   //FIX ME check why do we care about EOF (return of the read_all)
   read_all(fdServerPipe, opcode, 1, &reading_error);
   if(reading_error){
     fprintf(stderr, "Failed to read OP Code from server pipe\n");
+    return -1;
   }
 
-  if(*opcode != 1){
-    fprintf(stderr, "OP Code %d does not correspond to the connect opcode\n", *opcode);
-    return 1;
+  if(*opcode != OP_CODE_CONNECT){
+    fprintf(stderr, "OP Code %c does not correspond to the connect opcode\n", *opcode);
+    return -1;
   }
 
   read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
   if(reading_error == -1){
     fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
+    return -1;
   }
- 
+  printf("Req Pipe %s.\n", req_pipe ); // ????
+
   read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
   if(reading_error){
     fprintf(stderr, "Failed to read responses pipe path from server pipe\n");
+    return -1;
   }
+  printf("Resp Pipe %s.\n", resp_pipe); // ????
 
   read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
   if(reading_error){
     fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
+    return -1;
   }
+  printf("Notif Pipe %s.\n", notif_pipe); // ????
+
   return 0;
 }
 
-int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe){
-  int opCode = 0; //FIX ME (precisa de +1 para o \0?)
+char connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe){
+  char opCode = 'a'; //FIX ME (precisa de +1 para o \0?)
   char req_pipe[MAX_PIPE_PATH_LENGTH];
   char resp_pipe[MAX_PIPE_PATH_LENGTH];
   char notif_pipe[MAX_PIPE_PATH_LENGTH];
 
-  if(read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)){
+  if(read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == -1){
     fprintf(stderr, "Failed to read connect message\n");
-    return 1;
+    return '1';
   }
 
   *fdNotifPipe = open(notif_pipe, O_WRONLY);
   if(*fdNotifPipe < 0){
     fprintf(stderr, "Failed to open notifications pipe\n");
-    return 1;
+    return '1';
   }
 
   *fdReqPipe = open(req_pipe, O_RDONLY);
@@ -321,7 +329,7 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
     if(close(*fdNotifPipe)){
       fprintf(stderr, "Failed to close notifications pipe\n");
     }
-    return 1;
+    return '1';
   }
 
   *fdRespPipe = open(resp_pipe, O_WRONLY);
@@ -330,11 +338,11 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
     if(close(*fdNotifPipe) || close(*fdReqPipe)){
       fprintf(stderr, "Failed to notifications and requests pipes\n");
     }
-    return 1;
+    return '1';
   }
   // ???? apagar
   fprintf(stdout, "Connected to client: %s\n", req_pipe);
-  return 0;
+  return '0';
 }
 
 /// @brief 
@@ -345,7 +353,7 @@ int connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *f
 /// @param subscribedKeys 
 /// @param subKeyCount 
 /// @return 1 if CONNECT, SUBSCRIBE, UNSUBSCRIBE, 0 if DISCONNECT, -1 unknown opcode
-int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opcode, 
+int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char opcode, 
                    char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], 
                    int* subKeyCount){
                 
@@ -367,9 +375,12 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opc
       char key[KEY_MESSAGE_SIZE];
       int readingError;
       read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError);
+      printf("key: %s\n", key); // ????
+
       if(kvs_subscribe(key, fdNotifPipe, fdRespPipe)){
+        kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
         fprintf(stderr, "Failed to subscribe client\n");
-        return 1;
+        return 0;
       }
       strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
       (*subKeyCount)++;
@@ -381,15 +392,21 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const int opc
 
       char key[KEY_MESSAGE_SIZE];
       int readingError;
-      read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError); 
+      if(read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) == -1){
+        fprintf(stderr, "Failed to read key from requests pipe.Client was disconnected.\n");
+        kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+        return 0;
+      }
+      printf("unsub key %s\n", key); // ????
       // FIXME kvs_unsubscribe would be smarter if found directly from the list of subscriptions
       kvs_unsubscribe(key, fdNotifPipe, fdRespPipe);
       // FIXME remove from the list of subscriptions
       return 1;
     }
     default:{
-      fprintf(stderr, "Unrecognized OP Code: %d.\n", opcode);
-      return -1;
+      fprintf(stderr, "Unrecognized OP Code: %c. Client was disconnected.\n", opcode);
+      kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+      return 0;
     }
   }
   return -1;
@@ -399,52 +416,60 @@ void *process_host_thread(void *arg) {
   const char *fifo_path = (const char *)arg;
   if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
     fprintf(stderr, "Failed to create server pipe\n");
+    return NULL;
   }
-  printf("fifo\n");
 
   int fdServerPipe = open(fifo_path, O_RDONLY);
   if (fdServerPipe < 0) {
     fprintf(stderr, "Failed to open server pipe\n");
+    return NULL;
   }
 
   printf("Server pipe opened.\n");  // ????
 
 
   int fdReqPipe, fdRespPipe, fdNotifPipe;
-  int opcode = OP_CODE_CONNECT;
+  char opcode = OP_CODE_CONNECT;
+
   // FIXME isto nao funciona pq se o result for 1 quer dizer que nao ha pipes
   // e isto deveria so dar return sem mandar notif
-  int result = connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe);
-  if(result == 1){
-    fprintf(stderr, "FIXMEERRORCONNECTO\n");
-    return  NULL;
-  }
-  if(write_all(fdRespPipe, &opcode, 1) == -1){
-    fprintf(stderr, "Failed to write connect OP Code on the responses pipe.\n");
-  }
-  if(write_all(fdRespPipe, &result, 1) == -1){
-    fprintf(stderr, "Failed to write connect result on the responses pipe.\n");
-  }
-
+  char result = connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe);
+  printf("conncect result %c\n", result); // ????
   // FIXME ha maneiras melhores de fazer isto
   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]; 
   int countSubscribedKeys = 0;
 
+  if(write_all(fdRespPipe, &opcode, 1) == -1){
+    fprintf(stderr, "Failed to write connect OP Code on the responses pipe.\n");
+    kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
+    return NULL;
+  }
+  if(write_all(fdRespPipe, &result, 1) == -1){
+    fprintf(stderr, "Failed to write connect result on the responses pipe.\n");
+    kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
+    return NULL;
+  }
+
   int clientStatus = 1;
   int readingError;
-  opcode = 0;
+  opcode = 'a';
 
   while(clientStatus != CLIENT_TERMINATED){
+    printf("getting ready to read\n"); // ????
     if(read_all(fdReqPipe, &opcode, 1, &readingError) == -1){
       fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
+      kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
+      return NULL;
     }
     // ???? apagar
-    printf("opcode:%d\n", opcode);
+    printf("opcode:%c\n", opcode);
     fflush(stdout);
     clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
                                   subscribedKeys, &countSubscribedKeys);
     if(clientStatus == -1){
       fprintf(stderr, "Error reading from requests pipe.\n");
+      kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
+      return NULL;
     }
   }
 
