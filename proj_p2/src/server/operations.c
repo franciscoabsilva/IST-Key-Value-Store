@@ -290,6 +290,11 @@ void kvs_wait(unsigned int delay_ms) {
 }
 
 int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
+	if(strlen(key) == 0 || strlen(key) > MAX_STRING_SIZE){
+		write_to_resp_pipe(fdRespPipe, OP_CODE_SUBSCRIBE, RESULT_KEY_DOESNT_EXIST);
+		fprintf(stderr, "Client tried to subscribe an invalid key\n");
+		return 0;
+	}
 	int index = hash(key);
 	if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to lock key %d\n", index);
@@ -401,7 +406,8 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
 	for (int i = 0; i < subCount; i++) {
-		if(subscribedKeys[i] != NULL){
+		printf("q\n");
+		if(subscribedKeys[i] == NULL){
 			break;
 		}
 		kvs_aux_unsubscribe(subscribedKeys[i], fdNotifPipe);

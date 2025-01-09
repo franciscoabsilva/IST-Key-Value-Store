@@ -298,7 +298,6 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			int readingError;
 			read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError);
 			printf("Subscribed key: %s\n", key); // ????
-
 			if (kvs_subscribe(key, fdNotifPipe, fdRespPipe)) {
 				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 				fprintf(stderr, "Failed to subscribe client\n");
