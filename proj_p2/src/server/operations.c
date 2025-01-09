@@ -10,6 +10,8 @@
 #include "src/common/constants.h"
 #include "src/common/io.h"
 #include "src/common/protocol.h"
+#include <fcntl.h>
+
 
 
 static struct HashTable *kvs_table = NULL;
@@ -311,10 +313,7 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
 	const char opcode = OP_CODE_SUBSCRIBE;
-	if (write_all(fdRespPipe, &opcode, 1) == -1) {
-		return -1;
-	}
-	if (write_all(fdRespPipe, &result, 1) == -1) {
+	if(write_to_resp_pipe(fdRespPipe, opcode, result) == 1){
 		return -1;
 	}
 	return 0;
@@ -351,15 +350,51 @@ int kvs_aux_unsubscribe(const char *key, int fdNotifPipe) {
 int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 	int result = kvs_aux_unsubscribe(key, fdNotifPipe);
 	const char opcode = OP_CODE_UNSUBSCRIBE;
-	if (write_all(fdRespPipe, &opcode, 1) == -1) {
-		fprintf(stderr, "Failed to write unsubscribe OP Code on the responses pipe.\n");
-	}
-	char result_char = (char) result; // ??????
-	printf("result for unsub %c\n", result_char);
+	char result_char = result + '0';
 
-	if (write_all(fdRespPipe, &result_char, 1) == -1) {
-		fprintf(stderr, "Failed to write unsubscribe result on the responses pipe.\n");
+	if(write_to_resp_pipe(fdRespPipe, opcode, result_char) == 1){
+		return 1;
 	}
+	return 0;
+}
+
+int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe) {
+	char opCode = 'a'; //FIX ME (precisa de +1 para o \0?)
+	char req_pipe[MAX_PIPE_PATH_LENGTH];
+	char resp_pipe[MAX_PIPE_PATH_LENGTH];
+	char notif_pipe[MAX_PIPE_PATH_LENGTH];
+
+	if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == -1) {
+		fprintf(stderr, "Failed to read connect message\n");
+		return 1;
+	}
+
+	*fdNotifPipe = open(notif_pipe, O_WRONLY);
+	if (*fdNotifPipe < 0) {
+		fprintf(stderr, "Failed to open notifications pipe\n");
+		return 1;
+	}
+
+	*fdReqPipe = open(req_pipe, O_RDONLY);
+	if (*fdReqPipe < 0) {
+		fprintf(stderr, "Failed to open requests pipe\n");
+		if (close(*fdNotifPipe)) {
+			fprintf(stderr, "Failed to close notifications pipe\n");
+		}
+		return 1;
+	}
+
+	*fdRespPipe = open(resp_pipe, O_WRONLY);
+	if (*fdRespPipe < 0) {
+		fprintf(stderr, "Failed to open responses pipe\n");
+		if (close(*fdNotifPipe) || close(*fdReqPipe)) {
+			fprintf(stderr, "Failed to notifications and requests pipes\n");
+		}
+		return 1;
+	}
+	// ???? apagar
+	fprintf(stdout, "Connected to client: %s\n", req_pipe);
+	write_to_resp_pipe(*fdRespPipe, OP_CODE_CONNECT, '0');
 	return 0;
 }
 
@@ -372,7 +407,6 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 		kvs_aux_unsubscribe(subscribedKeys[i], fdNotifPipe);
 	}
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
-	char opCode;
 	char result = '0';
 	if (close(fdReqPipe) < 0) {
 		fprintf(stderr, "Failed to close requests pipe.\n");
@@ -384,17 +418,13 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 		result = '1';
 	}
 
-	if (write_all(fdRespPipe, &opCode, 1) == -1) {
-		fprintf(stderr, "Failed to write disconnect OP Code on the responses pipe.\n");
-		result = '1';
-	}
-
-	if (write_all(fdRespPipe, &result, 1) == -1) {
-		fprintf(stderr, "Failed to write disconnect result on the responses pipe.\n");
+	if(write_to_resp_pipe(fdRespPipe, OP_CODE_DISCONNECT, result) == 1){
+		return 1;
 	}
 
 	if (close(fdRespPipe) < 0) {
 		fprintf(stderr, "Failed to close responses pipe.\n");
+		return 1;
 	}
 	return 0;
 }

@@ -267,83 +267,8 @@ void *process_thread(void *arg) {
 	return NULL;
 }
 
-int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe) {
-	int reading_error = 0;
 
-	//FIX ME check why do we care about EOF (return of the read_all)
-	read_all(fdServerPipe, opcode, 1, &reading_error);
-	if (reading_error) {
-		fprintf(stderr, "Failed to read OP Code from server pipe\n");
-		return -1;
-	}
 
-	if (*opcode != OP_CODE_CONNECT) {
-		fprintf(stderr, "OP Code %c does not correspond to the connect opcode\n", *opcode);
-		return -1;
-	}
-
-	read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error == -1) {
-		fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
-		return -1;
-	}
-	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
-
-	read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error) {
-		fprintf(stderr, "Failed to read responses pipe path from server pipe\n");
-		return -1;
-	}
-	printf("Resp Pipe %s.\n", resp_pipe); // ????
-
-	read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error) {
-		fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
-		return -1;
-	}
-	printf("Notif Pipe %s.\n", notif_pipe); // ????
-
-	return 0;
-}
-
-char connect_to_client(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe) {
-	char opCode = 'a'; //FIX ME (precisa de +1 para o \0?)
-	char req_pipe[MAX_PIPE_PATH_LENGTH];
-	char resp_pipe[MAX_PIPE_PATH_LENGTH];
-	char notif_pipe[MAX_PIPE_PATH_LENGTH];
-
-	if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == -1) {
-		fprintf(stderr, "Failed to read connect message\n");
-		return '1';
-	}
-
-	*fdNotifPipe = open(notif_pipe, O_WRONLY);
-	if (*fdNotifPipe < 0) {
-		fprintf(stderr, "Failed to open notifications pipe\n");
-		return '1';
-	}
-
-	*fdReqPipe = open(req_pipe, O_RDONLY);
-	if (*fdReqPipe < 0) {
-		fprintf(stderr, "Failed to open requests pipe\n");
-		if (close(*fdNotifPipe)) {
-			fprintf(stderr, "Failed to close notifications pipe\n");
-		}
-		return '1';
-	}
-
-	*fdRespPipe = open(resp_pipe, O_WRONLY);
-	if (*fdRespPipe < 0) {
-		fprintf(stderr, "Failed to open responses pipe\n");
-		if (close(*fdNotifPipe) || close(*fdReqPipe)) {
-			fprintf(stderr, "Failed to notifications and requests pipes\n");
-		}
-		return '1';
-	}
-	// ???? apagar
-	fprintf(stdout, "Connected to client: %s\n", req_pipe);
-	return '0';
-}
 
 /// @brief 
 /// @param fdNotifPipe 
@@ -432,23 +357,14 @@ void *process_host_thread(void *arg) {
 
 	// FIXME isto nao funciona pq se o result for 1 quer dizer que nao ha pipes
 	// e isto deveria so dar return sem mandar notif
-	char result = connect_to_client(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe);
-	printf("Connect result %c\n", result); // ????
+	if(kvs_connect(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe) == 1){
+		fprintf(stderr, "Failed to connect to the server\n");
+		kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, 0, NULL);
+		return NULL;
+	}
 	// FIXME ha maneiras melhores de fazer isto
 	char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
 	int countSubscribedKeys = 0;
-
-	if (write_all(fdRespPipe, &opcode, 1) == -1) {
-		fprintf(stderr, "Failed to write connect OP Code on the responses pipe.\n");
-		kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
-		return NULL;
-	}
-	if (write_all(fdRespPipe, &result, 1) == -1) {
-		fprintf(stderr, "Failed to write connect result on the responses pipe.\n");
-		kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
-		return NULL;
-	}
-
 	int clientStatus = 1;
 	int readingError;
 	opcode = 'a';
