@@ -286,13 +286,13 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 		}
 
 		case OP_CODE_DISCONNECT: {
-			printf("YUHU KVS DISCONNECT\n");
+			printf("YUHU KVS DISCONNECT\n"); // ????
 			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 			return 1;
 		}
 
 		case OP_CODE_SUBSCRIBE: {
-			printf("YUHU KVS SUBSCRIBE\n");
+			printf("YUHU KVS SUBSCRIBE\n"); // ????
 
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
@@ -309,7 +309,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 		}
 
 		case OP_CODE_UNSUBSCRIBE: {
-			printf("YUHU KVS UNUBSCRIBE\n");
+			printf("YUHU KVS UNUBSCRIBE\n"); // ????
 
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
@@ -370,9 +370,7 @@ void *process_host_thread(void *arg) {
 			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
 			return NULL;
 		}
-		// ???? apagar
-		printf("Opcode:%c\n", opcode);
-		fflush(stdout);
+		printf("Opcode:%c\n", opcode); // ???? apagar
 		clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
 									  subscribedKeys, &countSubscribedKeys);
 	}

@@ -77,11 +77,11 @@ void *process_notif_thread(void *arg) {
 	char key[KEY_MESSAGE_SIZE];
 	char value[KEY_MESSAGE_SIZE];
 	while (1) {
-		if (read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readError) == -1
+		if (read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readError) <= 0
 			|| readError == -1) {
 			pthread_exit(NULL);
 		}
-		if (read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError) == -1
+		if (read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError) <= 0
 			|| readError == -1) {
 			pthread_exit(NULL);
 		}
@@ -173,7 +173,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	// FIX ME disconnect in case of an error
 	const char expected_OP_Code = OP_CODE_CONNECT;
 	char result;
-	printf("connect response: \n");
 	if (read_server_response(*fdResponsePipe, expected_OP_Code, &result) == 1) {
 		fprintf(stderr, "Failed to read connect message from response pipe.\n");
 	}
@@ -196,7 +195,6 @@ int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 	if (read_server_response(fdResponsePipe, OP_CODE_DISCONNECT, &result) == 1) {
 		fprintf(stderr, "Failed to read disconnect response from server.\n");
 	}
-	printf("disconnect response: %c\n", result);
 
 	if (pthread_cancel(notificationsThread)) {
 		fprintf(stderr, "Failed to join host thread\n");
@@ -250,7 +248,6 @@ int kvs_subscribe(int fdRequestPipe, int fdResponsePipe, const char *key) {
 
 	// should read from response pipe
 	char result;
-	printf("subscribe response: \n");
 
 	if (read_server_response(fdResponsePipe, OP_CODE_SUBSCRIBE, &result) == 1) {
 		fprintf(stderr, "Failed to read subscribe response from server.\n");
@@ -272,7 +269,6 @@ int kvs_unsubscribe(int fdResquestPipe, int fdResponsePipe, const char *key) {
 
 	// should read from response pipe
 	char result;
-	printf("unsubscribe response: \n");
 
 	if (read_server_response(fdResponsePipe, OP_CODE_UNSUBSCRIBE, &result) == 1) {
 		fprintf(stderr, "Failed to read unsubscribe response from server.\n");

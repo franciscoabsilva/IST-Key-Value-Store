@@ -325,7 +325,6 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 }
 
 int kvs_aux_unsubscribe(const char *key, int fdNotifPipe) {
-	printf("keyT: %s\n", key); //????
 	int index = hash(key);
 	if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to lock key %d\n", index);
@@ -406,7 +405,6 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
 	for (int i = 0; i < subCount; i++) {
-		printf("q\n");
 		if(subscribedKeys[i] == NULL){
 			break;
 		}
