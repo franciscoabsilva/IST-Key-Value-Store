@@ -296,7 +296,11 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
-			read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError);
+			if(read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
+				fprintf(stderr, "Failed to read key from requests pipe.Client was disconnected.\n");
+				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+				return 1;
+			}
 			printf("Subscribed key: %s\n", key); // ????
 			if (kvs_subscribe(key, fdNotifPipe, fdRespPipe)) {
 				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
@@ -313,8 +317,8 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
-			if (read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) == -1) {
-				fprintf(stderr, "Failed to read key from requests pipe.Client was disconnected.\n");
+			if (read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
+				fprintf(stderr, "Failed to read key from requests pipe. Client was disconnected.\n");
 				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 				return 1;
 			}
@@ -365,7 +369,7 @@ void *process_host_thread(void *arg) {
 	int readingError;
 
 	while (clientStatus != CLIENT_TERMINATED) {
-		if (read_all(fdReqPipe, &opcode, 1, &readingError) == -1) {
+		if (read_all(fdReqPipe, &opcode, 1, &readingError) <= 0) {
 			fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
 			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
 			return NULL;

@@ -179,7 +179,6 @@ void notify_subscribers(KeyNode *keyNode, const char *key, const char *value) {
 		if (write_all(subscriber->fdNotifPipe, key, KEY_MESSAGE_SIZE) == -1) {
 			fprintf(stderr, "Failed to write key to notification pipe.\n");
 		}
-		printf("NOTIFFIYBABUASDA subscriber %d\n", subscriber->fdNotifPipe); //????
 		if (write_all(subscriber->fdNotifPipe, value, KEY_MESSAGE_SIZE) == -1) {
 			fprintf(stderr, "Failed to write value to notification pipe.\n");
 		}

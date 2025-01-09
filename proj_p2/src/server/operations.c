@@ -352,6 +352,11 @@ int kvs_aux_unsubscribe(const char *key, int fdNotifPipe) {
 }
 
 int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
+	if(strlen(key) == 0 || strlen(key) > MAX_STRING_SIZE){
+		write_to_resp_pipe(fdRespPipe, OP_CODE_DISCONNECT, 1);
+		fprintf(stderr, "Client tried to unsubscribe an invalid key\n");
+		return 0;
+	}
 	int result = kvs_aux_unsubscribe(key, fdNotifPipe);
 	const char opcode = OP_CODE_UNSUBSCRIBE;
 	char result_char = result + '0';

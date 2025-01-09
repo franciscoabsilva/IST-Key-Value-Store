@@ -31,7 +31,8 @@ int read_server_response(int fdResponsePipe, const char expected_OP_Code, char *
 	char opcode;
 	int readingError = 0;
 
-	if (read_all(fdResponsePipe, &opcode, 1, &readingError) == -1) {
+	if (read_all(fdResponsePipe, &opcode, 1, &readingError) <= 0
+		|| readingError == -1) {
 		fprintf(stderr, "Failed to read opcode from responses pipe.\n");
 		return 1;
 	}
@@ -41,7 +42,8 @@ int read_server_response(int fdResponsePipe, const char expected_OP_Code, char *
 		return 1;
 	}
 
-	if (read_all(fdResponsePipe, result, 1, &readingError) == -1) {
+	if (read_all(fdResponsePipe, result, 1, &readingError) <= 0
+		|| readingError == -1) {
 		fprintf(stderr, "Failed to read disconnect result from responses pipe.\n");
 		return 1;
 	}

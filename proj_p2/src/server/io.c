@@ -63,8 +63,8 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 	int reading_error = 0;
 
 	//FIX ME check why do we care about EOF (return of the read_all)
-	read_all(fdServerPipe, opcode, 1, &reading_error);
-	if (reading_error) {
+	if(read_all(fdServerPipe, opcode, 1, &reading_error) <= 0
+	   || reading_error == 1) {
 		fprintf(stderr, "Failed to read OP Code from server pipe\n");
 		return 1;
 	}
@@ -73,9 +73,8 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 		fprintf(stderr, "OP Code %c does not correspond to the connect opcode\n", *opcode);
 		return 1;
 	}
-
-	read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error == -1) {
+	if(read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error) <= 0
+	   || reading_error == 1) {
 		fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
 		return 1;
 	}
