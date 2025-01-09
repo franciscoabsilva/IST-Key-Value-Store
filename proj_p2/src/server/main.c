@@ -293,7 +293,6 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 
 		case OP_CODE_SUBSCRIBE: {
 			printf("YUHU KVS SUBSCRIBE\n"); // ????
-
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
 			if(read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
@@ -303,8 +302,8 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			}
 			printf("Subscribed key: %s\n", key); // ????
 			if (kvs_subscribe(key, fdNotifPipe, fdRespPipe)) {
-				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 				fprintf(stderr, "Failed to subscribe client\n");
+				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 				return 1;
 			}
 			strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
@@ -314,7 +313,6 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 
 		case OP_CODE_UNSUBSCRIBE: {
 			printf("YUHU KVS UNUBSCRIBE\n"); // ????
-
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
 			if (read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
@@ -393,7 +391,6 @@ void *process_host_thread(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-	signal(SIGPIPE, SIG_IGN);
 
 	if (!(argc == 5)) {
 		fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max> [name_registry_FIFO]\n", argv[0]);
