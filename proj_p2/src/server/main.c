@@ -267,9 +267,6 @@ void *process_thread(void *arg) {
 	return NULL;
 }
 
-
-
-
 /// @brief 
 /// @param fdNotifPipe 
 /// @param fdReqPipe 
@@ -285,13 +282,13 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 	switch (opcode) {
 		case OP_CODE_CONNECT: {
 			fprintf(stderr, "Client already connected to server.\n");
-			return 1;
+			return 0;
 		}
 
 		case OP_CODE_DISCONNECT: {
 			printf("YUHU KVS DISCONNECT\n");
 			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
-			return 0;
+			return 1;
 		}
 
 		case OP_CODE_SUBSCRIBE: {
@@ -305,11 +302,11 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			if (kvs_subscribe(key, fdNotifPipe, fdRespPipe)) {
 				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 				fprintf(stderr, "Failed to subscribe client\n");
-				return 0;
+				return 1;
 			}
 			strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
 			(*subKeyCount)++;
-			return 1;
+			return 0;
 		}
 
 		case OP_CODE_UNSUBSCRIBE: {
@@ -320,18 +317,18 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			if (read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) == -1) {
 				fprintf(stderr, "Failed to read key from requests pipe.Client was disconnected.\n");
 				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
-				return 0;
+				return 1;
 			}
 			printf("Unsubscribe key %s\n", key); // ????
 			// FIXME kvs_unsubscribe would be smarter if found directly from the list of subscriptions
 			kvs_unsubscribe(key, fdNotifPipe, fdRespPipe);
 			// FIXME remove from the list of subscriptions
-			return 1;
+			return 0;
 		}
 		default: {
 			fprintf(stderr, "Unrecognized OP Code: %c. Client was disconnected.\n", opcode);
 			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
-			return 0;
+			return 1;
 		}
 	}
 }
@@ -365,9 +362,8 @@ void *process_host_thread(void *arg) {
 	// FIXME ha maneiras melhores de fazer isto
 	char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
 	int countSubscribedKeys = 0;
-	int clientStatus = 1;
+	int clientStatus = 0;
 	int readingError;
-	opcode = 'a';
 
 	while (clientStatus != CLIENT_TERMINATED) {
 		if (read_all(fdReqPipe, &opcode, 1, &readingError) == -1) {
@@ -433,7 +429,6 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "Failed to initialize lock\n");
 	}
 
-
 	pthread_t thread[MAX_THREADS];
 	struct ThreadArgs args = {dir, directory_path, &backupCounter};
 	for (unsigned int i = 0; i < MAX_THREADS; i++) {
@@ -471,7 +466,5 @@ int main(int argc, char *argv[]) {
 		pthread_rwlock_destroy(&globalHashLock) || kvs_terminate()) {
 		fprintf(stderr, "Failed to close resources\n");
 	}
-
-
 	return 0;
 }

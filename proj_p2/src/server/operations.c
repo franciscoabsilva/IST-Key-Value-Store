@@ -359,7 +359,7 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 }
 
 int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe) {
-	char opCode = 'a'; //FIX ME (precisa de +1 para o \0?)
+	char opCode;
 	char req_pipe[MAX_PIPE_PATH_LENGTH];
 	char resp_pipe[MAX_PIPE_PATH_LENGTH];
 	char notif_pipe[MAX_PIPE_PATH_LENGTH];

@@ -5,5 +5,4 @@
 #define SUCCESS 0
 #define ERROR 1
 
-
-#define CLIENT_TERMINATED 0
+#define CLIENT_TERMINATED 1
