@@ -288,10 +288,6 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 		return -1;
 	}
 	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
-	api.h
-	main.c
-	parser.c
-	parser.h
 
 	read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
 	if (reading_error) {
