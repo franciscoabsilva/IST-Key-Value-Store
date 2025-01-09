@@ -26,7 +26,7 @@ size_t strn_memcpy(char *dest, const char *src, size_t n);
 /// @param req_pipe The request pipe path
 /// @param resp_pipe The response pipe path
 /// @param notif_pipe The notification pipe path
-/// @return 0 on success, -1 on error
+/// @return 0 on success, 1 on error
 int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe);
 
 /// @brief Write a response message to the client	

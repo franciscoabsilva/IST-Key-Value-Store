@@ -364,7 +364,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 	char resp_pipe[MAX_PIPE_PATH_LENGTH];
 	char notif_pipe[MAX_PIPE_PATH_LENGTH];
 
-	if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == -1) {
+	if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)) {
 		fprintf(stderr, "Failed to read connect message\n");
 		return 1;
 	}
