@@ -22,12 +22,26 @@
 pthread_mutex_t backupCounterMutex;
 pthread_mutex_t dirMutex;
 pthread_rwlock_t globalHashLock;
+pthread_mutex_t clientsBufferMutex;
+
 
 struct ThreadArgs {
 	DIR *dir;
 	char *directory_path;
 	unsigned int *backupCounter;
 };
+
+struct Client {
+	char respFifo[MAX_PIPE_PATH_LENGTH];
+	char reqFifo[MAX_PIPE_PATH_LENGTH];
+	char notifFifo[MAX_PIPE_PATH_LENGTH];
+};
+
+struct argClientThread {
+	sem_t read; // tem q ter pointer?
+	sem_t write;
+	struct Client *clientsBuffer;
+}
 
 void *process_thread(void *arg) {
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
@@ -334,7 +348,8 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 	}
 }
 
-void *process_host_thread(void *arg) {
+
+void *process_client_thread(void *arg) {
 	const char *fifo_path = (const char *) arg;
 	if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
 		fprintf(stderr, "Failed to create server pipe\n");
@@ -346,7 +361,6 @@ void *process_host_thread(void *arg) {
 		fprintf(stderr, "Failed to open server pipe\n");
 		return NULL;
 	}
-
 	printf("Server pipe opened.\n");  // ????
 
 
@@ -380,14 +394,34 @@ void *process_host_thread(void *arg) {
 	if (close(fdServerPipe) < 0) {
 		fprintf(stderr, "Client failed to close requests pipe.\n");
 	}
-
 	if (unlink(fifo_path)) {
 		fprintf(stderr, "Client failed to unlink requests pipe.\n");
 	}
-
 	// ????
 	printf("end of hostthread\n");
 	return NULL;
+}
+
+void *process_host_thread(void *arg){
+	pthread_t thread[MAX_SESSION_COUNT];
+	struct Client clientsBuffer[MAX_SESSION_COUNT];
+
+	int in  = 0;
+	int out = 0;
+
+	sem_t read;
+	sem_t write;
+	sem_init(&read, 0, 0);
+	sem_init(&write, 0, MAX_SESSION_COUNT);
+
+
+	struct Client buff_producer_consumer[MAX_SESSION_COUNT];
+	for(int i = 0; i < MAX_SESSION_COUNT; i++){
+		if(pthread_create(&thread[i], NULL, process_client_thread, (void *) arg)){ //arg ???
+			fprintf(stderr, "Failed to create thread\n");
+		}
+	}
+
 }
 
 int main(int argc, char *argv[]) {
