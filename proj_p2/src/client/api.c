@@ -80,11 +80,11 @@ void *process_notif_thread(void *arg) {
 	char value[KEY_MESSAGE_SIZE];
 	while (1) {
 		if (read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readError) <= 0
-			|| readError == -1) {
+			|| readError == 1) {
 			pthread_exit(NULL);
 		}
 		if (read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError) <= 0
-			|| readError == -1) {
+			|| readError == 1) {
 			pthread_exit(NULL);
 		}
 		fprintf(stdout, "(%s,%s)\n", key, value);

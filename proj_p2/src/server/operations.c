@@ -21,6 +21,16 @@ typedef struct {
 	char value[MAX_STRING_SIZE];
 } KeyValuePair;
 
+typedef struct SubscriptionsKeyNode {
+    char *key;
+    struct KeyNode *next;
+} SubscriptionsKeyNode;
+
+typedef struct Client {
+    int fd1, fd2, fd3;
+    SubscriptionsKeyNode *subscriptions;
+} Client;
+
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
 /// @return Timespec with the given delay.
@@ -367,7 +377,7 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 	return 0;
 }
 
-int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe) {
+int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe, ClientList *clientList) {
 	char opCode;
 	char req_pipe[MAX_PIPE_PATH_LENGTH];
 	char resp_pipe[MAX_PIPE_PATH_LENGTH];
@@ -401,10 +411,46 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 		}
 		return 1;
 	}
+
+	Client *client = malloc(sizeof(Client));
+	if (client == NULL) {
+		fprintf(stderr, "Failed to allocate memory for client\n");
+		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
+			fprintf(stderr, "Failed to close pipes\n");
+		}
+		return 1;
+	}
+	client->fd1 = *fdReqPipe;
+	client->fd2 = *fdRespPipe;
+	client->fd3 = *fdNotifPipe;
+	client->subscriptions = NULL;
+
+	if (add_client(clientList, client)) {
+		fprintf(stderr, "Failed to add client to list\n");
+		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
+			fprintf(stderr, "Failed to close pipes\n");
+		}
+		free(client);
+		return 1;
+	}
+
 	// ???? apagar
 	fprintf(stdout, "Connected to client: %s\n", req_pipe);
 	write_to_resp_pipe(*fdRespPipe, OP_CODE_CONNECT, '0');
 	return 0;
+}
+
+int add_client(ClientList *list, Client *client) {
+    if (!list || !client) return 1;
+    
+    if (list->size >= MAX_SESSION_COUNT) {
+        fprintf(stderr, "Client list is full\n");
+        return 1; /// TODO ????? METER SEMAFORO PARA ELE ESPERAR PELA VEZ DELE
+    }
+
+    list->clients[list->size] = *client;
+    list->size++;
+    return 0;
 }
 
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,

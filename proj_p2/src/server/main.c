@@ -37,11 +37,19 @@ struct Client {
 	char notifFifo[MAX_PIPE_PATH_LENGTH];
 };
 
+struct ClientList {
+	struct Client clients[MAX_SESSION_COUNT];
+	int size = 0;
+};
+
 struct argClientThread {
 	sem_t read; // tem q ter pointer?
 	sem_t write;
 	struct Client *clientsBuffer;
 }
+
+struct ClientList clientList;
+
 
 void *process_thread(void *arg) {
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
@@ -369,7 +377,7 @@ void *process_client_thread(void *arg) {
 
 	// FIXME isto nao funciona pq se o result for 1 quer dizer que nao ha pipes
 	// e isto deveria so dar return sem mandar notif
-	if(kvs_connect(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe) == 1){
+	if(kvs_connect(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe, clientList) == 1){
 		fprintf(stderr, "Failed to connect to the server\n");
 		kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, 0, NULL);
 		return NULL;
@@ -469,7 +477,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// create thread that deals with clients
+	// create thread that deals with clients	
 	pthread_t host_thread;
 	if (pthread_create(&host_thread, NULL, process_host_thread, (void *) fifo_path)) {
 		fprintf(stderr, "Failed to create thread\n");

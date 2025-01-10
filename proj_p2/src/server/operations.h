@@ -52,7 +52,7 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe);
 
 int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe);
 
-int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe);
+int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe, ClientList *clientList);
 
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]);
