@@ -163,6 +163,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	if (*fdResponsePipe < 0) {
 		fprintf(stderr, "Client could not open response pipe.\n");
 		return 1;
+	}
 	
 
 	if (pthread_create(&notificationsThread, NULL, process_notif_thread, (void *) (fdNotificationPipe))) {
