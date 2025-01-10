@@ -153,11 +153,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 		return 1;
 	}
 
-	if (pthread_create(&notificationsThread, NULL, process_notif_thread, (void *) (fdNotificationPipe))) {
-		fprintf(stderr, "Failed to create thread\n");
-		return 1;
-	}
-
 	*fdRequestPipe = open(req_pipe_path, O_WRONLY);
 	if (*fdRequestPipe < 0) {
 		fprintf(stderr, "Client could not open request pipe.\n");
@@ -168,8 +163,12 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	if (*fdResponsePipe < 0) {
 		fprintf(stderr, "Client could not open response pipe.\n");
 		return 1;
-	}
+	
 
+	if (pthread_create(&notificationsThread, NULL, process_notif_thread, (void *) (fdNotificationPipe))) {
+		fprintf(stderr, "Failed to create thread\n");
+		return 1;
+	}
 
 	// read response from server
 	// FIX ME disconnect in case of an error
