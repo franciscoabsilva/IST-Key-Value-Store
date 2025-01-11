@@ -6,11 +6,11 @@ typedef struct SubscriptionsKeyNode {
     struct KeyNode *next;
 } SubscriptionsKeyNode;
 
-typedef struct ClientNode {
+struct Client {
     int fd1, fd2, fd3;
     SubscriptionsKeyNode *subscriptions;
-	struct ClientNode *next;
-} ClientNode;
+	//struct ClientNode *next;
+};
 
 typedef struct ClientList {
 	struct ClientNode *head;

@@ -21,6 +21,12 @@ typedef struct {
 	char value[MAX_STRING_SIZE];
 } KeyValuePair;
 
+
+struct Client *connectedClients[MAX_SESSION_COUNT] = {NULL};
+pthread_mutex_t connectedClientsMutex = PTHREAD_MUTEX_INITIALIZER; // FIXME
+
+
+
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
 /// @return Timespec with the given delay.
@@ -367,7 +373,96 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 	return 0;
 }
 
-int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe, ClientList *clientList) {
+/*
+int add_client(ClientNode *client) {
+	pthread_mutex_lock(&connectedClientsMutex);
+    if (clientList == NULL) {
+		clientList = malloc(sizeof(ClientList));
+		if (!clientList) {
+			fprintf(stderr, "Failed to allocate memory for client list\n");
+		} 
+		return 1;
+	}
+    if (clientList->size >= MAX_SESSION_COUNT) {
+        fprintf(stderr, "Client list is full\n");
+        return 1;
+    }
+
+	client->next = clientList->head;
+    clientList->head = client;
+
+    clientList->size++;
+	pthread_mutex_unlock(&connectedClientsMutex);
+    return 0;
+}
+
+int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
+	pthread_mutex_lock(&connectedClientsMutex);
+    if (!clientList || !clientList->head) {
+        fprintf(stderr, "Client list is empty or invalid\n");
+		pthread_mutex_unlock(&connectedClientsMutex);
+        return 1;
+    }
+
+    ClientNode *current = clientList->head;
+    ClientNode *prev = NULL;
+
+    while (current != NULL) {
+        if (current->fd1 == fdReqPipe && current->fd2 == fdRespPipe && current->fd3 == fdNotifPipe) {
+            if (prev == NULL) {
+                clientList->head = current->next;
+            } else {
+                prev->next = current->next;
+            }
+            free(current);
+            clientList->size--;
+			pthread_mutex_unlock(&connectedClientsMutex);
+            return 0;
+        }
+        prev = current;
+        current = current->next;
+    }
+	pthread_mutex_unlock(&connectedClientsMutex);
+    fprintf(stderr, "Client not found in the list\n");
+    return 1;
+}
+*/
+
+int add_client(struct Client *client) {
+	pthread_mutex_lock(&connectedClientsMutex);
+	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+		if (connectedClients[i] == NULL) {
+			connectedClients[i] = client;
+			pthread_mutex_unlock(&connectedClientsMutex);
+			return 0;
+		}
+	}
+	pthread_mutex_unlock(&connectedClientsMutex);
+	fprintf(stderr, "Client list is full\n");
+	return 1;
+}
+
+int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
+	pthread_mutex_lock(&connectedClientsMutex);
+	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+		if (connectedClients[i] != NULL
+			&& connectedClients[i]->fd1 == fdReqPipe 
+			&& connectedClients[i]->fd2 == fdRespPipe
+			&& connectedClients[i]->fd3 == fdNotifPipe) {
+
+			free(connectedClients[i]);
+			connectedClients[i] = NULL;
+			pthread_mutex_unlock(&connectedClientsMutex);
+			return 0;
+		}
+	}
+	pthread_mutex_unlock(&connectedClientsMutex);
+	fprintf(stderr, "Client not found in the list\n");
+	return 1;
+}
+
+int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, 
+				int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe) {
 	*fdNotifPipe = open(notif_pipe, O_WRONLY);
 	if (*fdNotifPipe < 0) {
 		fprintf(stderr, "Failed to open notifications pipe\n");
@@ -392,7 +487,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 		return 1;
 	}
 
-	ClientNode *client = malloc(sizeof(ClientNode));
+	struct Client *client = malloc(sizeof(struct Client));
 	if (client == NULL) {
 		fprintf(stderr, "Failed to allocate memory for client\n");
 		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
@@ -405,7 +500,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 	client->fd3 = *fdNotifPipe;
 	client->subscriptions = NULL;
 
-	if (add_client(clientList, client)) {
+	if (add_client(client)) {
 		fprintf(stderr, "Failed to add client to list\n");
 		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
 			fprintf(stderr, "Failed to close pipes\n");
@@ -420,23 +515,8 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 	return 0;
 }
 
-int add_client(ClientList *list, ClientNode *client) {
-    if (!list || !client) return 1;
-    
-    if (list->size >= MAX_SESSION_COUNT) {
-        fprintf(stderr, "Client list is full\n");
-        return 1; /// TODO ????? METER SEMAFORO PARA ELE ESPERAR PELA VEZ DELE
-    }
-
-	client->next = list->head;
-    list->head = client;
-
-    list->size++;
-    return 0;
-}
-
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], ClientList *clientList) {
+				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
 	for (int i = 0; i < subCount; i++) {
 		if(subscribedKeys[i] == NULL){
 			break;
@@ -464,7 +544,7 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 		fprintf(stderr, "Failed to close responses pipe.\n");
 	}
 
-	if (remove_client(clientList, fdReqPipe, fdRespPipe, fdNotifPipe)) {
+	if (remove_client(fdReqPipe, fdRespPipe, fdNotifPipe)) {
 		fprintf(stderr, "Failed to remove client from the list\n");
 		return 1;
 	}
@@ -472,32 +552,3 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 	return 0;
 }
 
-
-
-int remove_client(ClientList *clientList, int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
-    if (!clientList || !clientList->head) {
-        fprintf(stderr, "Client list is empty or invalid\n");
-        return 1;
-    }
-
-    ClientNode *current = clientList->head;
-    ClientNode *prev = NULL;
-
-    while (current != NULL) {
-        if (current->fd1 == fdReqPipe && current->fd2 == fdRespPipe && current->fd3 == fdNotifPipe) {
-            if (prev == NULL) {
-                clientList->head = current->next;
-            } else {
-                prev->next = current->next;
-            }
-            free(current);
-            clientList->size--;
-            return 0;
-        }
-        prev = current;
-        current = current->next;
-    }
-	
-    fprintf(stderr, "Client not found in the list\n");
-    return 1;
-}

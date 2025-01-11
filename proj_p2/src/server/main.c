@@ -5,11 +5,12 @@
 #include <unistd.h>
 
 #include <dirent.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
-#include <signal.h>
+#include <errno.h>
 #include <semaphore.h>
 
 #include "constants.h"
@@ -39,16 +40,16 @@ struct ClientInfo {
 	char notifFifo[MAX_PIPE_PATH_LENGTH];
 };
 
-ClientInfo clientsBuffer[MAX_SESSION_COUNT];
-ClientList clientList;
+struct ClientInfo *clientsBuffer[MAX_SESSION_COUNT];
 sem_t readSem;
 sem_t writeSem;
 
 // reading index for the clientsBuffer
 int in, out;
-
+int restartClients = 0;
 
 void *process_thread(void *arg) {
+	//FIXME DEAL WITH SIGNALS
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
 	DIR *dir = arg_struct->dir;
 	char *directory_path = arg_struct->directory_path;
@@ -391,22 +392,39 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 }
 
 
-void *process_client_thread(void *arg) {
+void *process_client_thread() {
+	/*
+	sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGUSR1);
 
-	sem_wait(read);
+	if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
+		perror("Error blocking SIGUSR1");
+		return NULL;
+	}*/
+	sem_wait(&readSem);
 	pthread_mutex_lock(&clientsBufferMutex);
-	ClientInfo newClient = clientsBuffer[out];
+	struct ClientInfo *newClient = clientsBuffer[out];
 	out++;
+
+	char reqPath[MAX_PIPE_PATH_LENGTH];
+	char respPath[MAX_PIPE_PATH_LENGTH];
+	char notifPath[MAX_PIPE_PATH_LENGTH];
+
+	strcpy(reqPath, newClient->reqFifo);
+	strcpy(respPath, newClient->respFifo);
+	strcpy(notifPath, newClient->notifFifo);
+
+	free(newClient);
+
 	if (out == MAX_SESSION_COUNT) out = 0;
 	pthread_mutex_unlock(&clientsBufferMutex);
-	sem_post(write);
+	sem_post(&writeSem);
 	
 	int fdReqPipe, fdRespPipe, fdNotifPipe;
 	char opcode = OP_CODE_CONNECT;
 
-	// FIXME isto nao funciona pq se o result for 1 quer dizer que nao ha pipes
-	// e isto deveria so dar return sem mandar notif
-	if(kvs_connect(&fdServerPipe, &fdReqPipe, &fdRespPipe, &fdNotifPipe, clientList) == 1){
+	if(kvs_connect(reqPath, respPath, notifPath, &fdReqPipe, &fdRespPipe, &fdNotifPipe) == 1){
 		fprintf(stderr, "Failed to connect to the server\n");
 		kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, 0, NULL);
 		return NULL;
@@ -428,35 +446,52 @@ void *process_client_thread(void *arg) {
 									  subscribedKeys, &countSubscribedKeys);
 	}
 
-	if (close(fdServerPipe) < 0) {
-		fprintf(stderr, "Client failed to close requests pipe.\n");
-	}
-	if (unlink(fifo_path)) {
-		fprintf(stderr, "Client failed to unlink requests pipe.\n");
-	}
-	// ????
 	printf("end of hostthread\n");
 	return NULL;
 }
 
-void *process_host_thread(void *arg){
-	pthread_t thread[MAX_SESSION_COUNT];
 
-	clientList.head = NULL;
-	clientList.size = 0;
+int handle_SIGUSR1(){
+	// FIXME mutex?
+	restartClients = 1;
+	return 0;
+}
+
+int restart_clients(){
+	in = 0;
+	out = 0;
+	sem_destroy(&readSem);
+	sem_destroy(&writeSem);
+	sem_init(&readSem, 0, 0);
+	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
+
+	//delete_clients();
+
+	return 0;
+}
+
+void *process_host_thread(void *arg){
+	// FIXME UNBLOCK O SIGUSR1
+
+	/*
+	if(signal(SIGUSR1, handle_SIGUSR1()) == SIG_ERR){
+		fprintf(stderr, "Failed to set signal handler\n");
+		exit(EXIT_FAILURE); //FIXME: ou isto ou nada ?
+							// return nao faz sentido pq a process thread nunca deve ser terminada
+	}*/
+
+	const char *fifo_path = (const char *) arg;
 
 	in  = 0;
 	out = 0;
 	
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
-
 	pthread_mutex_init(&clientsBufferMutex, NULL);
 
 	
-	// abrir server pipe
-
-	if (unlink(fifo_path)) {
+	// Create and open server pipe
+	if (unlink(fifo_path) && errno != ENOENT) {
 		fprintf(stderr, "Failed to unlink server pipe\n");
 		return NULL;
 	}
@@ -473,6 +508,8 @@ void *process_host_thread(void *arg){
 	}
 	printf("Server pipe opened.\n");  // ????? TODO apagar
 
+	// Create threads to deal with clients
+	pthread_t thread[MAX_SESSION_COUNT];
 	for(int i = 0; i < MAX_SESSION_COUNT; i++){
 		if(pthread_create(&thread[i], NULL, process_client_thread, NULL)){ //arg ???
 			fprintf(stderr, "Failed to create thread\n");
@@ -480,33 +517,43 @@ void *process_host_thread(void *arg){
 	}
 
 	while (1) {
-		sem_wait(write);
+		if(restartClients){
+			restart_clients();
+			restartClients = 0;	
+		}
 
+		sem_wait(&writeSem);
 		char opCode;
 		char req_pipe[MAX_PIPE_PATH_LENGTH];
 		char resp_pipe[MAX_PIPE_PATH_LENGTH];
 		char notif_pipe[MAX_PIPE_PATH_LENGTH];
 
-		if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)) {
+		if (read_connect_message(fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)) {
 			fprintf(stderr, "Failed to read connect message\n");
 			break;
 		}
-		struct ClientInfo newClient = malloc(sizeof(struct ClientInfo));
-		strcpy(newClient.respFifo, resp_pipe);
-		strcpy(newClient.reqFifo, req_pipe);
-		strcpy(newClient.notifFifo, notif_pipe);
- 	
+		struct ClientInfo *newClient = malloc(sizeof(struct ClientInfo));
+		if(newClient == NULL){
+			fprintf(stderr, "Failed to allocate memory for new client\n");
+			break;
+		}
+		strcpy(newClient->respFifo, resp_pipe);
+		strcpy(newClient->reqFifo, req_pipe);
+		strcpy(newClient->notifFifo, notif_pipe);
+
+		// add the new client to producer-consumer buffer
 		clientsBuffer[in] = newClient;
+
 		in++;
 		if (in == MAX_SESSION_COUNT) in = 0;
-
-		sem_post(read);
+		sem_post(&readSem);
 	}
 
 	return NULL;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {	
+	// FIXME SIGMASK O SIGUSR1
 
 	if (!(argc == 5)) {
 		fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max> [name_registry_FIFO]\n", argv[0]);

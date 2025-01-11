@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <pthread.h>
+#include <errno.h>
 #include <sys/stat.h>
 
 pthread_t notificationsThread;
@@ -112,15 +113,15 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	}
 
 	// create Client Pipes
-	if (unlink(req_pipe_path)) {
+	if (unlink(req_pipe_path) && errno != ENOENT) {
 		fprintf(stderr, "Client could not unlink request pipe.\n");
 		return 1;
 	}
-	if (unlink(resp_pipe_path)) {
+	if (unlink(resp_pipe_path) && errno != ENOENT) {
 		fprintf(stderr, "Client could not unlink response pipe.\n");
 		return 1;
 	}
-	if (unlink(notif_pipe_path)) {
+	if (unlink(notif_pipe_path) && errno != ENOENT) {
 		fprintf(stderr, "Client could not unlink notification pipe.\n");
 		return 1;
 	}

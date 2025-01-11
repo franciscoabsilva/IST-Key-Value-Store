@@ -51,13 +51,17 @@ void kvs_wait_backup();
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
 
+
+int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe);
+
 int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe);
 
 int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe);
 
-int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe, ClientList *clientList);
+int kvs_connect(char* reqPath, char* respPath, char* notifPath,
+				int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe);
 
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], ClientList *clientList);
+				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]);
 
 #endif  // KVS_OPERATIONS_H
