@@ -410,7 +410,7 @@ void *process_host_thread(void *arg){
 
 	int in  = 0;
 	int out = 0;
-;
+	
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 
@@ -421,7 +421,7 @@ void *process_host_thread(void *arg){
 			fprintf(stderr, "Failed to create thread\n");
 		}
 	}
-
+	return NULL;
 }
 
 int main(int argc, char *argv[]) {

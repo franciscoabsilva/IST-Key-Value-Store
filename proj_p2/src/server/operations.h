@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include "src/common/constants.h"
+#include "client.h"
 
 
 
