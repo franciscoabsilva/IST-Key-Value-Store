@@ -12,7 +12,7 @@
 #include "src/common/protocol.h"
 #include <fcntl.h>
 
-
+#include "client.h"
 
 static struct HashTable *kvs_table = NULL;
 
@@ -20,16 +20,6 @@ typedef struct {
 	char key[MAX_STRING_SIZE];
 	char value[MAX_STRING_SIZE];
 } KeyValuePair;
-
-typedef struct SubscriptionsKeyNode {
-    char *key;
-    struct KeyNode *next;
-} SubscriptionsKeyNode;
-
-typedef struct Client {
-    int fd1, fd2, fd3;
-    SubscriptionsKeyNode *subscriptions;
-} Client;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -412,7 +402,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 		return 1;
 	}
 
-	Client *client = malloc(sizeof(Client));
+	ClientStuff *client = malloc(sizeof(ClientStuff));
 	if (client == NULL) {
 		fprintf(stderr, "Failed to allocate memory for client\n");
 		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
@@ -440,7 +430,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 	return 0;
 }
 
-int add_client(ClientList *list, Client *client) {
+int add_client(ClientList *list, ClientStuff *client) {
     if (!list || !client) return 1;
     
     if (list->size >= MAX_SESSION_COUNT) {
@@ -448,19 +438,22 @@ int add_client(ClientList *list, Client *client) {
         return 1; /// TODO ????? METER SEMAFORO PARA ELE ESPERAR PELA VEZ DELE
     }
 
-    list->clients[list->size] = *client;
+	client->next = list->head;
+    list->head = client;
+
     list->size++;
     return 0;
 }
 
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
+				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], ClientList *clientList) {
 	for (int i = 0; i < subCount; i++) {
 		if(subscribedKeys[i] == NULL){
 			break;
 		}
 		kvs_aux_unsubscribe(subscribedKeys[i], fdNotifPipe);
 	}
+
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';
 	if (close(fdReqPipe) < 0) {
@@ -474,12 +467,47 @@ int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
 	}
 
 	if(write_to_resp_pipe(fdRespPipe, OP_CODE_DISCONNECT, result) == 1){
-		return 1;
+		fprintf(stderr, "Failed to write disconnect response to responses pipe\n");
 	}
 
 	if (close(fdRespPipe) < 0) {
 		fprintf(stderr, "Failed to close responses pipe.\n");
+	}
+
+	if (remove_client(clientList, fdReqPipe, fdRespPipe, fdNotifPipe)) {
+		fprintf(stderr, "Failed to remove client from the list\n");
 		return 1;
 	}
+
 	return 0;
+}
+
+
+
+int remove_client(ClientList *clientList, int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
+    if (!clientList || !clientList->head) {
+        fprintf(stderr, "Client list is empty or invalid\n");
+        return 1;
+    }
+
+    ClientStuff *current = clientList->head;
+    ClientStuff *prev = NULL;
+
+    while (current != NULL) {
+        if (current->fd1 == fdReqPipe && current->fd2 == fdRespPipe && current->fd3 == fdNotifPipe) {
+            if (prev == NULL) {
+                clientList->head = current->next;
+            } else {
+                prev->next = current->next;
+            }
+            free(current);
+            clientList->size--;
+            return 0;
+        }
+        prev = current;
+        current = current->next;
+    }
+	
+    fprintf(stderr, "Client not found in the list\n");
+    return 1;
 }

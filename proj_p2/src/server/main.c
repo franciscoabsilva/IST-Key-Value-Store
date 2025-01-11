@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <semaphore.h>
 
 #include "constants.h"
 #include "operations.h"
@@ -18,6 +19,7 @@
 #include "src/common/constants.h"
 #include "src/common/protocol.h"
 
+#include "client.h"
 
 pthread_mutex_t backupCounterMutex;
 pthread_mutex_t dirMutex;
@@ -31,25 +33,15 @@ struct ThreadArgs {
 	unsigned int *backupCounter;
 };
 
-struct Client {
+struct argClientThread {
 	char respFifo[MAX_PIPE_PATH_LENGTH];
 	char reqFifo[MAX_PIPE_PATH_LENGTH];
 	char notifFifo[MAX_PIPE_PATH_LENGTH];
 };
 
-struct ClientList {
-	struct Client clients[MAX_SESSION_COUNT];
-	int size = 0;
-};
-
-struct argClientThread {
-	sem_t read; // tem q ter pointer?
-	sem_t write;
-	struct Client *clientsBuffer;
-}
-
-struct ClientList clientList;
-
+ClientList clientList;
+sem_t readSem;
+sem_t writeSem;
 
 void *process_thread(void *arg) {
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
@@ -318,7 +310,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
 			if(read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
-				fprintf(stderr, "Failed to read key from requests pipe.Client was disconnected.\n");
+				fprintf(stderr, "Failed to read key from requests pipe.\n");
 				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
 				return 1;
 			}
@@ -412,18 +404,18 @@ void *process_client_thread(void *arg) {
 
 void *process_host_thread(void *arg){
 	pthread_t thread[MAX_SESSION_COUNT];
-	struct Client clientsBuffer[MAX_SESSION_COUNT];
+
+	clientList.head = NULL;
+	clientList.size = 0;
 
 	int in  = 0;
 	int out = 0;
+;
+	sem_init(&readSem, 0, 0);
+	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 
-	sem_t read;
-	sem_t write;
-	sem_init(&read, 0, 0);
-	sem_init(&write, 0, MAX_SESSION_COUNT);
+	
 
-
-	struct Client buff_producer_consumer[MAX_SESSION_COUNT];
 	for(int i = 0; i < MAX_SESSION_COUNT; i++){
 		if(pthread_create(&thread[i], NULL, process_client_thread, (void *) arg)){ //arg ???
 			fprintf(stderr, "Failed to create thread\n");

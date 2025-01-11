@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include "src/common/constants.h"
 
+
+
 /// Initializes the KVS state.
 /// @return 0 if the KVS state was initialized successfully, 1 otherwise.
 int kvs_init();
@@ -55,6 +57,6 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe);
 int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe, ClientList *clientList);
 
 int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]);
+				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE], ClientList *clientList);
 
 #endif  // KVS_OPERATIONS_H
