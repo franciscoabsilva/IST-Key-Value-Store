@@ -112,7 +112,19 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	}
 
 	// create Client Pipes
-	// FIXME check if the permissons needs to be 0666
+	if (unlink(req_pipe_path)) {
+		fprintf(stderr, "Client could not unlink request pipe.\n");
+		return 1;
+	}
+	if (unlink(resp_pipe_path)) {
+		fprintf(stderr, "Client could not unlink response pipe.\n");
+		return 1;
+	}
+	if (unlink(notif_pipe_path)) {
+		fprintf(stderr, "Client could not unlink notification pipe.\n");
+		return 1;
+	}
+
 	if (mkfifo(req_pipe_path, 0666)) {
 		fprintf(stderr, "Client could not create request pipe.\n");
 		return 1;

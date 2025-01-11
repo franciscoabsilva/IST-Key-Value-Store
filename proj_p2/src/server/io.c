@@ -59,43 +59,6 @@ char *concatenate_write_registry(char *message, const char *req_pipe_path,
 	return message;
 }
 
-int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe) {
-	int reading_error = 0;
-
-	//FIX ME check why do we care about EOF (return of the read_all)
-	if(read_all(fdServerPipe, opcode, 1, &reading_error) <= 0
-	   || reading_error == 1) {
-		fprintf(stderr, "Failed to read OP Code from server pipe\n");
-		return 1;
-	}
-
-	if (*opcode != OP_CODE_CONNECT) {
-		fprintf(stderr, "OP Code %c does not correspond to the connect opcode\n", *opcode);
-		return 1;
-	}
-	if(read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error) <= 0
-	   || reading_error == 1) {
-		fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
-		return 1;
-	}
-	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
-
-	read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error) {
-		fprintf(stderr, "Failed to read responses pipe path from server pipe\n");
-		return 1;
-	}
-	printf("Resp Pipe %s.\n", resp_pipe); // ????
-
-	read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error) {
-		fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
-		return 1;
-	}
-	printf("Notif Pipe %s.\n", notif_pipe); // ????
-
-	return 0;
-}
 
 int write_to_resp_pipe (int fdRespPipe, const char opcode, const char result) {
 	if (write_all(fdRespPipe, &opcode, 1) == -1) {

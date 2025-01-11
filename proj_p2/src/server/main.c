@@ -24,7 +24,7 @@
 pthread_mutex_t backupCounterMutex;
 pthread_mutex_t dirMutex;
 pthread_rwlock_t globalHashLock;
-pthread_mutex_t clientsBufferMutex;
+pthread_mutex_t clientsBufferMutex; // For reading
 
 
 struct ThreadArgs {
@@ -33,15 +33,20 @@ struct ThreadArgs {
 	unsigned int *backupCounter;
 };
 
-struct argClientThread {
+struct ClientInfo {
 	char respFifo[MAX_PIPE_PATH_LENGTH];
 	char reqFifo[MAX_PIPE_PATH_LENGTH];
 	char notifFifo[MAX_PIPE_PATH_LENGTH];
 };
 
+ClientInfo clientsBuffer[MAX_SESSION_COUNT];
 ClientList clientList;
 sem_t readSem;
 sem_t writeSem;
+
+// reading index for the clientsBuffer
+int in, out;
+
 
 void *process_thread(void *arg) {
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
@@ -281,6 +286,43 @@ void *process_thread(void *arg) {
 	return NULL;
 }
 
+int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe) {
+	int reading_error = 0;
+
+	if(read_all(fdServerPipe, opcode, 1, &reading_error) <= 0
+	   || reading_error == 1) {
+		fprintf(stderr, "Failed to read OP Code from server pipe\n");
+		return 1;
+	}
+
+	if (*opcode != OP_CODE_CONNECT) {
+		fprintf(stderr, "OP Code %c does not correspond to the connect opcode\n", *opcode);
+		return 1;
+	}
+	
+	if(read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error) <= 0
+	   || reading_error == 1) {
+		fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
+		return 1;
+	}
+	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
+
+	read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
+	if (reading_error) {
+		fprintf(stderr, "Failed to read responses pipe path from server pipe\n");
+		return 1;
+	}
+	printf("Resp Pipe %s.\n", resp_pipe); // ????
+
+	read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
+	if (reading_error) {
+		fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
+		return 1;
+	}
+	printf("Notif Pipe %s.\n", notif_pipe); // ????
+	return 0;
+}
+
 /// @brief 
 /// @param fdNotifPipe 
 /// @param fdReqPipe 
@@ -350,20 +392,15 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 
 
 void *process_client_thread(void *arg) {
-	const char *fifo_path = (const char *) arg;
-	if (mkfifo(fifo_path, 0666)) { // FIXME???? devia ser 0640????
-		fprintf(stderr, "Failed to create server pipe\n");
-		return NULL;
-	}
 
-	int fdServerPipe = open(fifo_path, O_RDONLY);
-	if (fdServerPipe < 0) {
-		fprintf(stderr, "Failed to open server pipe\n");
-		return NULL;
-	}
-	printf("Server pipe opened.\n");  // ????
-
-
+	sem_wait(read);
+	pthread_mutex_lock(&clientsBufferMutex);
+	ClientInfo newClient = clientsBuffer[out];
+	out++;
+	if (out == MAX_SESSION_COUNT) out = 0;
+	pthread_mutex_unlock(&clientsBufferMutex);
+	sem_post(write);
+	
 	int fdReqPipe, fdRespPipe, fdNotifPipe;
 	char opcode = OP_CODE_CONNECT;
 
@@ -408,19 +445,64 @@ void *process_host_thread(void *arg){
 	clientList.head = NULL;
 	clientList.size = 0;
 
-	int in  = 0;
-	int out = 0;
+	in  = 0;
+	out = 0;
 	
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 
+	pthread_mutex_init(&clientsBufferMutex, NULL);
+
 	
+	// abrir server pipe
+
+	if (unlink(fifo_path)) {
+		fprintf(stderr, "Failed to unlink server pipe\n");
+		return NULL;
+	}
+
+	if (mkfifo(fifo_path, 0666)) {
+		fprintf(stderr, "Failed to create server pipe\n");
+		return NULL;
+	}
+
+	int fdServerPipe = open(fifo_path, O_RDONLY);
+	if (fdServerPipe < 0) {
+		fprintf(stderr, "Failed to open server pipe\n");
+		return NULL;
+	}
+	printf("Server pipe opened.\n");  // ????? TODO apagar
 
 	for(int i = 0; i < MAX_SESSION_COUNT; i++){
-		if(pthread_create(&thread[i], NULL, process_client_thread, (void *) arg)){ //arg ???
+		if(pthread_create(&thread[i], NULL, process_client_thread, NULL)){ //arg ???
 			fprintf(stderr, "Failed to create thread\n");
 		}
 	}
+
+	while (1) {
+		sem_wait(write);
+
+		char opCode;
+		char req_pipe[MAX_PIPE_PATH_LENGTH];
+		char resp_pipe[MAX_PIPE_PATH_LENGTH];
+		char notif_pipe[MAX_PIPE_PATH_LENGTH];
+
+		if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)) {
+			fprintf(stderr, "Failed to read connect message\n");
+			break;
+		}
+		struct ClientInfo newClient = malloc(sizeof(struct ClientInfo));
+		strcpy(newClient.respFifo, resp_pipe);
+		strcpy(newClient.reqFifo, req_pipe);
+		strcpy(newClient.notifFifo, notif_pipe);
+ 	
+		clientsBuffer[in] = newClient;
+		in++;
+		if (in == MAX_SESSION_COUNT) in = 0;
+
+		sem_post(read);
+	}
+
 	return NULL;
 }
 

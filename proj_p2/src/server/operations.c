@@ -368,16 +368,6 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 }
 
 int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe, ClientList *clientList) {
-	char opCode;
-	char req_pipe[MAX_PIPE_PATH_LENGTH];
-	char resp_pipe[MAX_PIPE_PATH_LENGTH];
-	char notif_pipe[MAX_PIPE_PATH_LENGTH];
-
-	if (read_connect_message(*fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)) {
-		fprintf(stderr, "Failed to read connect message\n");
-		return 1;
-	}
-
 	*fdNotifPipe = open(notif_pipe, O_WRONLY);
 	if (*fdNotifPipe < 0) {
 		fprintf(stderr, "Failed to open notifications pipe\n");
@@ -402,7 +392,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 		return 1;
 	}
 
-	ClientStuff *client = malloc(sizeof(ClientStuff));
+	ClientNode *client = malloc(sizeof(ClientNode));
 	if (client == NULL) {
 		fprintf(stderr, "Failed to allocate memory for client\n");
 		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
@@ -430,7 +420,7 @@ int kvs_connect(int *fdServerPipe, int *fdReqPipe, int *fdRespPipe, int *fdNotif
 	return 0;
 }
 
-int add_client(ClientList *list, ClientStuff *client) {
+int add_client(ClientList *list, ClientNode *client) {
     if (!list || !client) return 1;
     
     if (list->size >= MAX_SESSION_COUNT) {
@@ -490,8 +480,8 @@ int remove_client(ClientList *clientList, int fdReqPipe, int fdRespPipe, int fdN
         return 1;
     }
 
-    ClientStuff *current = clientList->head;
-    ClientStuff *prev = NULL;
+    ClientNode *current = clientList->head;
+    ClientNode *prev = NULL;
 
     while (current != NULL) {
         if (current->fd1 == fdReqPipe && current->fd2 == fdRespPipe && current->fd3 == fdNotifPipe) {
