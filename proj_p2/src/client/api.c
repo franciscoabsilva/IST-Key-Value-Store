@@ -140,7 +140,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	}
 
 	// send connect message to server
-	// FIX ME MUTEX NESTA CENA
+	// FIX ME MUTEX NESTA CENA	
 	const char opcode = OP_CODE_CONNECT;
 	if (write_all(*fdServerPipe, &opcode, 1) == -1) {
 		fprintf(stderr, "Error writing connect OP Code on the server pipe\n");

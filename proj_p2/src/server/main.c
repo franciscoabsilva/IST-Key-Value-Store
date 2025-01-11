@@ -308,15 +308,15 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 	}
 	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
 
-	read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error) {
+	if(read_all(fdServerPipe, resp_pipe, MAX_PIPE_PATH_LENGTH, &reading_error) <= 0
+	   || reading_error == 1) {
 		fprintf(stderr, "Failed to read responses pipe path from server pipe\n");
 		return 1;
 	}
 	printf("Resp Pipe %s.\n", resp_pipe); // ????
 
-	read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error);
-	if (reading_error) {
+	if(read_all(fdServerPipe, notif_pipe, MAX_PIPE_PATH_LENGTH, &reading_error) <= 0
+	   || reading_error == 1) {
 		fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
 		return 1;
 	}
@@ -501,7 +501,7 @@ void *process_host_thread(void *arg){
 		return NULL;
 	}
 
-	int fdServerPipe = open(fifo_path, O_RDONLY);
+	int fdServerPipe = open(fifo_path, O_RDWR );
 	if (fdServerPipe < 0) {
 		fprintf(stderr, "Failed to open server pipe\n");
 		return NULL;
