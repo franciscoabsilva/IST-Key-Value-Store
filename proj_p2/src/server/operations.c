@@ -307,7 +307,7 @@ int kvs_subscribe(const char *key, struct Client **client) {
 		return -1;
 	}
 
-	int subscriptionStatus;
+	int subscriptionStatus = 0;
 	char result = RESULT_KEY_DOESNT_EXIST;
 	KeyNode *keyNode = kvs_table->table[index];
 	while (keyNode != NULL) {
@@ -380,7 +380,7 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 	return result;
 }
 
-int client_remove_subscription(const char *key, struct Client **client) {
+void client_remove_subscription(const char *key, struct Client **client) {
     SubscriptionsKeyNode *current = (*client)->subscriptions;
     SubscriptionsKeyNode *prev = NULL;
     
@@ -402,8 +402,6 @@ int client_remove_subscription(const char *key, struct Client **client) {
             current = current->next;
         }
     }
-    
-    return 0;
 }
 
 

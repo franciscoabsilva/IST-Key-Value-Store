@@ -578,7 +578,7 @@ int main(int argc, char *argv[]) {
 
 	// FIXME SIGMASK O SIGUSR1
 
-	if (!(argc == 5)) {
+	if (argc != 5) {
 		fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max> [name_registry_FIFO]\n", argv[0]);
 		return 1;
 	}

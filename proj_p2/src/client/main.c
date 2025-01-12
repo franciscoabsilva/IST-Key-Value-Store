@@ -12,7 +12,7 @@
 
 
 int main(int argc, char *argv[]) {
-	if (argc < 3) {
+	if (argc != 3) {
 		fprintf(stderr, "Usage: %s <client_unique_id> <register_pipe_path>\n", argv[0]);
 		return 1;
 	}
