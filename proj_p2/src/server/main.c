@@ -386,6 +386,10 @@ int manage_request(struct Client *client, const char opcode,
 
 
 void *process_client_thread() {
+	sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGUSR1);
+    pthread_sigmask(SIG_BLOCK, &set, NULL);
 	/*
 	sigset_t set;
     sigemptyset(&set);
@@ -447,13 +451,14 @@ void *process_client_thread() {
 }
 
 
-int handle_SIGUSR1(){
+void handle_SIGUSR1(){
 	// FIXME mutex?
 	restartClients = 1;
-	return 0;
+	sem_post(&writeSem);
 }
 
 int restart_clients(){
+	printf("estpi +ronto a ser restarted\n");
 	in = 0;
 	out = 0;
 	sem_destroy(&readSem);
@@ -482,6 +487,10 @@ void *process_host_thread(void *arg){
     sigaddset(&signal_set, SIGPIPE);
     pthread_sigmask(SIG_BLOCK, &signal_set, NULL);
 }*/
+	sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGUSR1);
+    pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
 	const char *fifo_path = (const char *) arg;
 
@@ -520,12 +529,11 @@ void *process_host_thread(void *arg){
 	}
 
 	while (1) {
-		if(restartClients){
-			restart_clients();
-			restartClients = 0;	
-		}
 
 		sem_wait(&writeSem);
+
+		if(restartClients) restart_clients();	
+
 		char opCode;
 		char req_pipe[MAX_PIPE_PATH_LENGTH];
 		char resp_pipe[MAX_PIPE_PATH_LENGTH];
@@ -559,11 +567,13 @@ void *process_host_thread(void *arg){
 
 int main(int argc, char *argv[]) {	
 	signal(SIGPIPE, SIG_IGN);
-	
-	sigset_t set;
-	sigemptyset(&set);
-	sigaddset(&set, SIGUSR1);
-	pthread_sigmask(SIG_BLOCK, &set, NULL);
+
+    // Configurar o tratador de SIGUSR1
+    struct sigaction sa;
+    sa.sa_handler = handle_SIGUSR1;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGUSR1, &sa, NULL);
 
 	// FIXME SIGMASK O SIGUSR1
 
