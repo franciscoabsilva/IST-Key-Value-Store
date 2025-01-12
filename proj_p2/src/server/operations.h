@@ -54,13 +54,13 @@ void kvs_wait(unsigned int delay_ms);
 
 int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe);
 
-int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe);
+int kvs_subscribe(const char *key, struct Client **client);
 
-int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe);
+int kvs_unsubscribe(const char *key, struct Client **client);
 
 int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client);
 
-int kvs_disconnect(struct Client *client, int subCount,
+int kvs_disconnect(struct Client **client, int subCount,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]);
 
 #endif  // KVS_OPERATIONS_H

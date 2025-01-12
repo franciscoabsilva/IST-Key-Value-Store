@@ -3,7 +3,7 @@
 
 typedef struct SubscriptionsKeyNode {
     char *key;
-    struct KeyNode *next;
+    struct SubscriptionsKeyNode *next;
 } SubscriptionsKeyNode;
 
 struct Client {

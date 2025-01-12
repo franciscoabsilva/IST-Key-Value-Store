@@ -324,6 +324,23 @@ int kvs_subscribe(const char *key, struct Client **client) {
 	if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
+
+	SubscriptionsKeyNode *newSub = malloc(sizeof(SubscriptionsKeyNode));
+	if (newSub == NULL) {
+		fprintf(stderr, "Failed to allocate memory for new subscription\n");
+		return -1;
+	}
+
+	newSub->key = strdup(key);
+	if (newSub->key == NULL) {
+		fprintf(stderr, "Failed to allocate memory for new subscription key\n");
+		free(newSub);
+		return -1;
+	}
+
+	newSub->next = (*client)->subscriptions;
+	(*client)->subscriptions = newSub;
+
 	const char opcode = OP_CODE_SUBSCRIBE;
 	if(write_to_resp_pipe((*client)->fdResp, opcode, result) == 1){
 		return -1;
@@ -331,7 +348,7 @@ int kvs_subscribe(const char *key, struct Client **client) {
 	return 0;
 }
 
-int kvs_aux_unsubscribe(const char *key, int fdNotifPipe) {
+int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 	int index = hash(key);
 	if (pthread_rwlock_wrlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to lock key %d\n", index);
@@ -347,29 +364,52 @@ int kvs_aux_unsubscribe(const char *key, int fdNotifPipe) {
 				}
 				return 1;
 			}
-			result = remove_subscriber(keyNode->subscriber, fdNotifPipe);
+			result = remove_subscriber(keyNode->subscriber, (*client)->fdNotif);
 			break;
 		}
 		keyNode = keyNode->next;
 	}
+
 	if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
+
+	if (result == 1) {
+		return 1;
+	}
+
+	SubscriptionsKeyNode *current = (*client)->subscriptions;
+	SubscriptionsKeyNode *prev = NULL;
+	while (current != NULL) {
+		if (strcmp(current->key, key) == 0) {
+			if (prev == NULL) {
+				(*client)->subscriptions = current->next;
+			} else {
+				prev->next = current->next;
+			}
+			free(current->key);
+			free(current);
+			return result;
+		}
+		prev = current;
+		current = current->next;
+	}
+	
 	return result;
 }
 
-int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
+int kvs_unsubscribe(const char *key, struct Client **client) {
 	if(strlen(key) == 0 || strlen(key) > MAX_STRING_SIZE){
-		write_to_resp_pipe(fdRespPipe, OP_CODE_DISCONNECT, 1);
+		write_to_resp_pipe((*client)->fdResp, OP_CODE_DISCONNECT, 1);
 		fprintf(stderr, "Client tried to unsubscribe an invalid key\n");
 		return 0;
 	}
-	int result = kvs_aux_unsubscribe(key, fdNotifPipe);
+	int result = kvs_aux_unsubscribe(key, client);
 	const char opcode = OP_CODE_UNSUBSCRIBE;
 	char result_char = '0';
 	if (result == 1) result_char = '1';
 
-	if(write_to_resp_pipe(fdRespPipe, opcode, result_char) == 1){
+	if(write_to_resp_pipe((*client)->fdResp, opcode, result_char) == 1){
 		return 1;
 	}
 	return 0;
@@ -517,36 +557,36 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 	return 0;
 }
 
-int kvs_disconnect(struct Client *client, int subCount,
+int kvs_disconnect(struct Client **client, int subCount,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
 	for (int i = 0; i < subCount; i++) {
 		if(subscribedKeys[i] == NULL){ // TODO tirar esta verificação ?????
 			break;
 		}
-		kvs_aux_unsubscribe(subscribedKeys[i], client->fdNotif);
+		kvs_aux_unsubscribe(subscribedKeys[i], client);
 	}
 
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';
-	if (close(client->fdReq) < 0) {
+	if (close((*client)->fdReq) < 0) {
 		fprintf(stderr, "Failed to close requests pipe.\n");
 		result = '1';
 	}
 
-	if (close(client->fdNotif) < 0) {
+	if (close((*client)->fdNotif) < 0) {
 		fprintf(stderr, "Failed to close notifications pipe.\n");
 		result = '1';
 	}
 
-	if(write_to_resp_pipe(client->fdResp, OP_CODE_DISCONNECT, result) == 1){
+	if(write_to_resp_pipe((*client)->fdResp, OP_CODE_DISCONNECT, result) == 1){
 		fprintf(stderr, "Failed to write disconnect response to responses pipe\n");
 	}
 
-	if (close(client->fdResp) < 0) {
+	if (close((*client)->fdResp) < 0) {
 		fprintf(stderr, "Failed to close responses pipe.\n");
 	}
 
-	if (remove_client(client->fdReq, client->fdResp, client->fdNotif)) {
+	if (remove_client((*client)->fdReq, (*client)->fdResp, (*client)->fdNotif)) {
 		fprintf(stderr, "Failed to remove client from the list\n");
 		return 1;
 	}
