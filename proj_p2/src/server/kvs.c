@@ -172,6 +172,27 @@ int remove_subscriber(Subscriber *subscriber, int fdNotifPipe) {
 	}
 	return 1; // subscription not found
 }
+/*
+int remove_subscriber(Subscriber **subscriber, int fdNotifPipe) {
+    Subscriber *prev = NULL;  // Start with prev as NULL
+    Subscriber *curr = *subscriber;  // Start with the head of the list
+    while (curr != NULL) {
+        if (curr->fdNotifPipe == fdNotifPipe) {
+            // If we're removing the head, update the head pointer
+            if (prev == NULL) {
+                *subscriber = curr->next;  // Move the head to the next element
+            } else {
+                prev->next = curr->next;  // Remove current from the list
+            }
+            free(curr);  // Free the memory of the removed subscriber
+            return 0;  // Successfully removed
+        }
+        prev = curr;  // Move prev to current
+        curr = curr->next;  // Move to the next subscriber
+    }
+    return 1;  // Subscription not found
+}*/
+
 
 void notify_subscribers(KeyNode *keyNode, const char *key, const char *value) {
 	Subscriber *subscriber = keyNode->subscriber;
