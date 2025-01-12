@@ -5,4 +5,4 @@ make
 cd src
 cd server
 clear
-./kvs jobs 1 1 baba
+valgrind ./kvs jobs 1 1 baba

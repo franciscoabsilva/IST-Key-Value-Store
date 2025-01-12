@@ -61,11 +61,11 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
 
 	// Key not found, create a new key node
 	keyNode = malloc(sizeof(KeyNode));
-	keyNode->subscriber = malloc(sizeof(Subscriber));
 	if (!keyNode) {
 		fprintf(stderr, "Error: Allocating key node.\n");
 		return 1;
 	}
+	keyNode->subscriber = malloc(sizeof(Subscriber));
 	if (!keyNode->subscriber) {
 		fprintf(stderr, "Error: Allocating subscriber.\n");
 		free(keyNode);

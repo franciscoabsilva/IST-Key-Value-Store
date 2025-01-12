@@ -49,17 +49,6 @@ size_t strn_memcpy(char *dest, const char *src, size_t n) {
 	return bytes_to_copy;
 }
 
-char *concatenate_write_registry(char *message, const char *req_pipe_path,
-								 const char *resp_pipe_path,
-								 const char *notif_pipe_path) {
-	message[0] = 1;
-	strn_memcpy(message + 1, req_pipe_path, 40);
-	strn_memcpy(message + 41, resp_pipe_path, 40);
-	strn_memcpy(message + 81, notif_pipe_path, 40);
-	return message;
-}
-
-
 int write_to_resp_pipe (int fdRespPipe, const char opcode, const char result) {
 	if (write_all(fdRespPipe, &opcode, 1) == -1) {
 		fprintf(stderr, "Failed to write OP Code %c to the responses pipe.\n", opcode);

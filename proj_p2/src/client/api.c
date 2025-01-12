@@ -85,7 +85,7 @@ int read_server_response(int fdResponsePipe, const char expected_OP_Code, char *
 
 void *process_notif_thread(void *arg) {
 	const int *fdNotificationPipe = (const int *) arg;
-	int readError;
+	int readError = 0;
 
 	// FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
 	char key[KEY_MESSAGE_SIZE];
@@ -179,7 +179,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	if (pthread_create(&notificationsThread, NULL, process_notif_thread, (void *) (fdNotificationPipe))) {
 		fprintf(stderr, "Failed to create thread\n");
 		return 1;
-	}
+	} // TODO FECHAR ISTO NO DISCONNECT
 
 	// read response from server
 	// FIX ME disconnect in case of an error
@@ -209,7 +209,11 @@ int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 	}
 
 	if (pthread_cancel(notificationsThread)) {
-		fprintf(stderr, "Failed to join host thread\n");
+		fprintf(stderr, "Failed to cancel notification thread\n");
+	}
+
+	if (pthread_join(notificationsThread, NULL)) {
+		fprintf(stderr, "Failed to join notification thread\n");
 	}
 
 	// close pipes and unlink pipe files
