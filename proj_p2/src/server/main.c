@@ -453,16 +453,15 @@ void *process_client_thread() {
 
 void handle_SIGUSR1(){
 	// FIXME mutex?
+	printf("SIGUSR1 received\n");
+	sig_safe_close_clients();
 	restartClients = 1;
 	sem_post(&writeSem);
 }
 
 void close_all_clients() {
     pthread_rwlock_wrlock(&globalHashLock);
-
     for (int i = 0; i < MAX_SESSION_COUNT; i++) clientsBuffer[i] = NULL;
-	disconnect_all_clients();
-
     pthread_rwlock_unlock(&globalHashLock);
 	printf("All clients disconnected\n");
 }
@@ -475,6 +474,7 @@ int restart_clients(){
 	sem_destroy(&writeSem);
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
+	remove_all_subscriptions();
 	close_all_clients();
 	restartClients = 0;
 	return 0;
@@ -500,6 +500,9 @@ void *process_host_thread(void *arg){
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+
+	pid_t pid = getpid();
+	printf("PID: %d\n", pid); // ???? TODO TIRAR
 
 	const char *fifo_path = (const char *) arg;
 
@@ -539,10 +542,9 @@ void *process_host_thread(void *arg){
 	}
 
 	while (1) {
-
 		sem_wait(&writeSem);
-
-		if(restartClients) restart_clients();	
+		
+		if(restartClients) restart_clients();
 
 		char opCode;
 		char req_pipe[MAX_PIPE_PATH_LENGTH];

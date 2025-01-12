@@ -556,14 +556,43 @@ int kvs_disconnect(struct Client **client) {
 
 	return 0;
 }
-
-int disconnect_all_clients() {
+int sig_safe_close_clients(){
 	pthread_mutex_lock(&connectedClientsMutex);
 	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
 		if (connectedClients[i] != NULL) {
-			if (kvs_disconnect(&connectedClients[i])) {
-				fprintf(stderr, "Failed to disconnect client %d\n", i);
+			close(connectedClients[i]->fdReq);
+			close(connectedClients[i]->fdResp);
+			close(connectedClients[i]->fdNotif);
+		}
+	}
+	pthread_mutex_unlock(&connectedClientsMutex);
+	return 0;
+}
+
+int clean_subscriptions(struct Client **client){
+	SubscriptionsKeyNode *current = (*client)->subscriptions;
+	while (current != NULL) {
+		if (kvs_aux_unsubscribe(current->key, client) == 1) {
+			fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
+		}
+		SubscriptionsKeyNode *next = current->next;
+		free(current->key);
+		free(current);
+		current = next;
+	}
+	(*client)->subscriptions = NULL;
+	return 0;
+}
+
+int remove_all_subscriptions() {
+	pthread_mutex_lock(&connectedClientsMutex);
+	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+		if (connectedClients[i] != NULL) {
+			if(connectedClients[i]->subscriptions != NULL){
+				clean_subscriptions(&connectedClients[i]);
 			}
+			free(connectedClients[i]);
+			connectedClients[i] = NULL;
 		}
 	}
 	pthread_mutex_unlock(&connectedClientsMutex);

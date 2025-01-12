@@ -44,9 +44,6 @@ int kvs_show(int fdOut);
 /// @return 0 if the backup was successful, 1 otherwise.
 int kvs_backup(int fdBck);
 
-/// Waits for the last backup to be called.
-void kvs_wait_backup();
-
 /// Waits for a given amount of time.
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
@@ -62,6 +59,8 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 
 int kvs_disconnect(struct Client **client);
 
-int disconnect_all_clients();
+int sig_safe_close_clients();
+
+int remove_all_subscriptions();
 
 #endif  // KVS_OPERATIONS_H
