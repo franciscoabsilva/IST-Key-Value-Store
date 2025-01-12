@@ -557,14 +557,20 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 	return 0;
 }
 
-int kvs_disconnect(struct Client **client, int subCount,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
-	for (int i = 0; i < subCount; i++) {
-		if(subscribedKeys[i] == NULL){ // TODO tirar esta verificação ?????
-			break;
+int kvs_disconnect(struct Client **client) {
+
+	// Unsubscribe all keys
+	SubscriptionsKeyNode *current = (*client)->subscriptions;
+	while (current != NULL) {
+		if (kvs_aux_unsubscribe(current->key, client) == 1) {
+			fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
 		}
-		kvs_aux_unsubscribe(subscribedKeys[i], client);
+		SubscriptionsKeyNode *next = current->next;
+		free(current->key);
+		free(current);
+		current = next;
 	}
+	(*client)->subscriptions = NULL; // DAR FREE A ESTAS SUBSCRIPTIONS ????? TODOO
 
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';
