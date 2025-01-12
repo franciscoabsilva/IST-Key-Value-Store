@@ -470,7 +470,6 @@ void *process_client_thread() {
 		}
 
 		printf("end of hostthread\n");
-		break;
 	}
 	return NULL;
 }
