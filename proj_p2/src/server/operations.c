@@ -394,13 +394,13 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 		prev = current;
 		current = current->next;
 	}
-	
+
 	return result;
 }
 
 int kvs_unsubscribe(const char *key, struct Client **client) {
 	if(strlen(key) == 0 || strlen(key) > MAX_STRING_SIZE){
-		write_to_resp_pipe((*client)->fdResp, OP_CODE_DISCONNECT, 1);
+		write_to_resp_pipe((*client)->fdResp, OP_CODE_UNSUBSCRIBE, 1);
 		fprintf(stderr, "Client tried to unsubscribe an invalid key\n");
 		return 0;
 	}

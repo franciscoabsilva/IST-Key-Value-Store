@@ -3,9 +3,9 @@ WRITE [(d,dinis)(c,carlota)]
 READ [x,z,l,v]
 SHOW
 BACKUP
-a
 DELETE [c]
 READ [c]
+a
 WAIT 10000
 a
 SHOW
@@ -17,6 +17,7 @@ WRITE [(a,anna)(b,bernardo)]
 WRITE [(d,dinis)(c,carlota)]
 WRITE [(a,anna)(b,bernardo)]
 WAIT 10000
+b
 WRITE [(d,dinis)(c,carlota)]
 WRITE [(a,anna)(b,bernardo)]
 WRITE [(d,dinis)(c,carlota)]
