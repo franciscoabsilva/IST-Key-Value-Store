@@ -300,7 +300,7 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 		fprintf(stderr, "OP Code %c does not correspond to the connect opcode\n", *opcode);
 		return 1;
 	}
-	
+
 	if(read_all(fdServerPipe, req_pipe, MAX_PIPE_PATH_LENGTH, &reading_error) <= 0
 	   || reading_error == 1) {
 		fprintf(stderr, "Failed to read requests pipe path from server pipe\n");
@@ -511,7 +511,11 @@ void *process_host_thread(void *arg){
 		return NULL;
 	}
 
+<<<<<<< HEAD
 	int fdServerPipe = open(fifo_path, O_RDWR);
+=======
+	int fdServerPipe = open(fifo_path, O_RDONLY);
+>>>>>>> bfe04cbec17b2544fa14074ed6a079b06e7e99da
 	if (fdServerPipe < 0) {
 		fprintf(stderr, "Failed to open server pipe\n");
 		return NULL;
@@ -521,7 +525,7 @@ void *process_host_thread(void *arg){
 	// Create threads to deal with clients
 	pthread_t thread[MAX_SESSION_COUNT];
 	for(int i = 0; i < MAX_SESSION_COUNT; i++){
-		if(pthread_create(&thread[i], NULL, process_client_thread, NULL)){ //arg ???
+		if(pthread_create(&thread[i], NULL, process_client_thread, NULL)){
 			fprintf(stderr, "Failed to create thread\n");
 		}
 	}
@@ -538,7 +542,7 @@ void *process_host_thread(void *arg){
 		char resp_pipe[MAX_PIPE_PATH_LENGTH];
 		char notif_pipe[MAX_PIPE_PATH_LENGTH];
 
-		if (read_connect_message(fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe)) {
+		if (read_connect_message(fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == 1) {
 			fprintf(stderr, "Failed to read connect message\n");
 			break;
 		}
