@@ -519,20 +519,15 @@ int kvs_disconnect(struct Client **client) {
 	// Unsubscribe all keys
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
 	while (current != NULL) {
-		fprintf(stdout, "Disconnected from client WHILE\n");
 		if (kvs_aux_unsubscribe(current->key, client) == 1) {
 			fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
 		}
-		fprintf(stdout, "Disconnected from client WHILE2\n");
 		SubscriptionsKeyNode *next = current->next;
 		free(current->key);
 		free(current);
 		current = next;
-		fprintf(stdout, "Disconnected from client WHILE\n");
 	}
 	(*client)->subscriptions = NULL; // DAR FREE A ESTAS SUBSCRIPTIONS ????? TODOO
-
-	fprintf(stdout, "Disconnected from client ALINDO\n");
 
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';

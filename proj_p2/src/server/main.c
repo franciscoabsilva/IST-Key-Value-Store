@@ -344,7 +344,7 @@ int manage_request(struct Client *client, const char opcode,
 		case OP_CODE_SUBSCRIBE: {
 			printf("YUHU KVS SUBSCRIBE\n"); // ????
 			char key[KEY_MESSAGE_SIZE];
-			int readingError;
+			int readingError = 0;
 			if(read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
 				fprintf(stderr, "Failed to read key from requests pipe.\n");
 				kvs_disconnect(&client);
@@ -364,11 +364,10 @@ int manage_request(struct Client *client, const char opcode,
 		case OP_CODE_UNSUBSCRIBE: {
 			printf("YUHU KVS UNUBSCRIBE\n"); // ????
 			char key[KEY_MESSAGE_SIZE];
-			int readingError;
+			int readingError = 0;
 			if (read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read key from requests pipe. Client was disconnected.\n");
 				kvs_disconnect(&client);
-				fprintf(stderr, "TODO APAGAR FORA KVS DISCONNECT\n");
 				return 1;
 			}
 			printf("Unsubscribe key %s\n", key); // ????
@@ -428,7 +427,7 @@ void *process_client_thread() {
 		char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
 		int countSubscribedKeys = 0;
 		int clientStatus = 0;
-		int readingError;
+		int readingError = 0;
 		char opcode = OP_CODE_CONNECT;
 
 		while (clientStatus != CLIENT_TERMINATED) {
