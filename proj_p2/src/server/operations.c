@@ -295,9 +295,9 @@ void kvs_wait(unsigned int delay_ms) {
 	nanosleep(&delay, NULL);
 }
 
-int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
+int kvs_subscribe(const char *key, struct Client **client) {
 	if(strlen(key) == 0 || strlen(key) > MAX_STRING_SIZE){
-		write_to_resp_pipe(fdRespPipe, OP_CODE_SUBSCRIBE, RESULT_KEY_DOESNT_EXIST);
+		write_to_resp_pipe((*client)->fdResp, OP_CODE_SUBSCRIBE, RESULT_KEY_DOESNT_EXIST);
 		fprintf(stderr, "Client tried to subscribe an invalid key\n");
 		return 0;
 	}
@@ -311,7 +311,7 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 	KeyNode *keyNode = kvs_table->table[index];
 	while (keyNode != NULL) {
 		if (strcmp(keyNode->key, key) == 0) {
-			if (add_subscriber(keyNode, fdNotifPipe) == -1) {
+			if (add_subscriber(keyNode, (*client)->fdNotif) == -1) {
 				fprintf(stderr, "Failed to add subscriber\n");
 				//FIXME result = RESULT_ERROR;
 			}
@@ -320,11 +320,12 @@ int kvs_subscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 		}
 		keyNode = keyNode->next;
 	}
+
 	if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
 	const char opcode = OP_CODE_SUBSCRIBE;
-	if(write_to_resp_pipe(fdRespPipe, opcode, result) == 1){
+	if(write_to_resp_pipe((*client)->fdResp, opcode, result) == 1){
 		return -1;
 	}
 	return 0;

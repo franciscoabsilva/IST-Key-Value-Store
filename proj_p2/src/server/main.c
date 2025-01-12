@@ -351,7 +351,7 @@ int manage_request(struct Client *client, const char opcode,
 				return 1;
 			}
 			printf("Subscribed key: %s\n", key); // ????
-			if (kvs_subscribe(key, client->fdNotif, client->fdResp)) { // meter == 1 ????? TODO
+			if (kvs_subscribe(key, &client)) { // meter == 1 ????? TODO
 				fprintf(stderr, "Failed to subscribe client\n");
 				kvs_disconnect(client, *subKeyCount, subscribedKeys);
 				return 1;
@@ -420,7 +420,7 @@ void *process_client_thread() {
 		if(kvs_connect(reqPath, respPath, notifPath, &client) == 1){
 			fprintf(stderr, "Failed to connect to the server\n");
 			kvs_disconnect(client, 0, NULL);
-			break;
+			continue;
 		}
 
 		// FIXME ha maneiras melhores de fazer isto
