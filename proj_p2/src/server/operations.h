@@ -60,7 +60,6 @@ int kvs_unsubscribe(const char *key, struct Client **client);
 
 int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client);
 
-int kvs_disconnect(struct Client **client, int subCount,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]);
+int kvs_disconnect(struct Client **client);
 
 #endif  // KVS_OPERATIONS_H

@@ -307,13 +307,15 @@ int kvs_subscribe(const char *key, struct Client **client) {
 		return -1;
 	}
 
+	int subscriptionStatus;
 	char result = RESULT_KEY_DOESNT_EXIST;
 	KeyNode *keyNode = kvs_table->table[index];
 	while (keyNode != NULL) {
 		if (strcmp(keyNode->key, key) == 0) {
-			if (add_subscriber(keyNode, (*client)->fdNotif) == -1) {
+			subscriptionStatus = add_subscriber(keyNode, (*client)->fdNotif);
+			if (subscriptionStatus == -1) {
 				fprintf(stderr, "Failed to add subscriber\n");
-				//FIXME result = RESULT_ERROR;
+				//FIXME TODOD ????? result = RESULT_ERROR;
 			}
 			result = RESULT_KEY_EXISTS;
 			break;
@@ -325,21 +327,23 @@ int kvs_subscribe(const char *key, struct Client **client) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
 
-	SubscriptionsKeyNode *newSub = malloc(sizeof(SubscriptionsKeyNode));
-	if (newSub == NULL) {
-		fprintf(stderr, "Failed to allocate memory for new subscription\n");
-		return -1;
-	}
+	if (subscriptionStatus == 0) {
+		SubscriptionsKeyNode *newSub = malloc(sizeof(SubscriptionsKeyNode));
+		if (newSub == NULL) {
+			fprintf(stderr, "Failed to allocate memory for new subscription\n");
+			return -1;
+		}
 
-	newSub->key = strdup(key);
-	if (newSub->key == NULL) {
-		fprintf(stderr, "Failed to allocate memory for new subscription key\n");
-		free(newSub);
-		return -1;
-	}
+		newSub->key = strdup(key);
+		if (newSub->key == NULL) {
+			fprintf(stderr, "Failed to allocate memory for new subscription key\n");
+			free(newSub);
+			return -1;
+		}
 
-	newSub->next = (*client)->subscriptions;
-	(*client)->subscriptions = newSub;
+		newSub->next = (*client)->subscriptions;
+		(*client)->subscriptions = newSub;
+	}
 
 	const char opcode = OP_CODE_SUBSCRIBE;
 	if(write_to_resp_pipe((*client)->fdResp, opcode, result) == 1){
@@ -362,7 +366,7 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 				if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
 					fprintf(stderr, "Failed to unlock key %d\n", index);
 				}
-				return 1;
+				return result;
 			}
 			result = remove_subscriber(keyNode->subscriber, (*client)->fdNotif);
 			break;
@@ -374,9 +378,7 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
 
-	if (result == 1) {
-		return 1;
-	}
+	if (result == 1) return result;
 
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
 	SubscriptionsKeyNode *prev = NULL;
@@ -562,15 +564,20 @@ int kvs_disconnect(struct Client **client) {
 	// Unsubscribe all keys
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
 	while (current != NULL) {
+		fprintf(stdout, "Disconnected from client WHILE\n");
 		if (kvs_aux_unsubscribe(current->key, client) == 1) {
 			fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
 		}
+		fprintf(stdout, "Disconnected from client WHILE2\n");
 		SubscriptionsKeyNode *next = current->next;
 		free(current->key);
 		free(current);
 		current = next;
+		fprintf(stdout, "Disconnected from client WHILE\n");
 	}
 	(*client)->subscriptions = NULL; // DAR FREE A ESTAS SUBSCRIPTIONS ????? TODOO
+
+	fprintf(stdout, "Disconnected from client ALINDO\n");
 
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';

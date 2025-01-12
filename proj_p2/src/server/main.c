@@ -337,7 +337,7 @@ int manage_request(struct Client *client, const char opcode,
 
 		case OP_CODE_DISCONNECT: {
 			printf("YUHU KVS DISCONNECT\n"); // ????
-			kvs_disconnect(&client, *subKeyCount, subscribedKeys);
+			kvs_disconnect(&client);
 			return 1;
 		}
 
@@ -347,13 +347,13 @@ int manage_request(struct Client *client, const char opcode,
 			int readingError;
 			if(read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
 				fprintf(stderr, "Failed to read key from requests pipe.\n");
-				kvs_disconnect(&client, *subKeyCount, subscribedKeys);
+				kvs_disconnect(&client);
 				return 1;
 			}
 			printf("Subscribed key: %s\n", key); // ????
 			if (kvs_subscribe(key, &client)) { // meter == 1 ????? TODO
 				fprintf(stderr, "Failed to subscribe client\n");
-				kvs_disconnect(&client, *subKeyCount, subscribedKeys);
+				kvs_disconnect(&client);
 				return 1;
 			}
 			strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
@@ -367,7 +367,8 @@ int manage_request(struct Client *client, const char opcode,
 			int readingError;
 			if (read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read key from requests pipe. Client was disconnected.\n");
-				kvs_disconnect(&client, *subKeyCount, subscribedKeys);
+				kvs_disconnect(&client);
+				fprintf(stderr, "TODO APAGAR FORA KVS DISCONNECT\n");
 				return 1;
 			}
 			printf("Unsubscribe key %s\n", key); // ????
@@ -378,7 +379,7 @@ int manage_request(struct Client *client, const char opcode,
 		}
 		default: {
 			fprintf(stderr, "Unrecognized OP Code: %c. Client was disconnected.\n", opcode);
-			kvs_disconnect(&client, *subKeyCount, subscribedKeys);
+			kvs_disconnect(&client);
 			return 1;
 		}
 	}
@@ -419,7 +420,7 @@ void *process_client_thread() {
 
 		if(kvs_connect(reqPath, respPath, notifPath, &client) == 1){
 			fprintf(stderr, "Failed to connect to the server\n");
-			kvs_disconnect(&client, 0, NULL);
+			kvs_disconnect(&client);
 			continue;
 		}
 
@@ -433,7 +434,7 @@ void *process_client_thread() {
 		while (clientStatus != CLIENT_TERMINATED) {
 			if (read_all(client->fdReq, &opcode, 1, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
-				kvs_disconnect(&client, countSubscribedKeys, subscribedKeys);
+				kvs_disconnect(&client);
 				break;
 			}
 			printf("Opcode:%c\n", opcode); // ???? apagar
