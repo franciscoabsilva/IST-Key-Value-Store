@@ -158,41 +158,27 @@ int add_subscriber(KeyNode *keyNode, int fdNotifPipe) {
 	return 0;
 }
 
-int remove_subscriber(Subscriber *subscriber, int fdNotifPipe) {
-	Subscriber *prev = subscriber;
-	while (subscriber != NULL) {
-		if (subscriber->fdNotifPipe == fdNotifPipe) {
-			Subscriber *nextSub = subscriber->next;
-			free(subscriber);
-			prev->next = nextSub;
-			return 0; // subscriber existed and was removed
-		}
-		prev = subscriber;
-		subscriber = subscriber->next;
-	}
-	return 1; // subscription not found
-}
-/*
-int remove_subscriber(Subscriber **subscriber, int fdNotifPipe) {
-    Subscriber *prev = NULL;  // Start with prev as NULL
-    Subscriber *curr = *subscriber;  // Start with the head of the list
-    while (curr != NULL) {
-        if (curr->fdNotifPipe == fdNotifPipe) {
-            // If we're removing the head, update the head pointer
-            if (prev == NULL) {
-                *subscriber = curr->next;  // Move the head to the next element
-            } else {
-                prev->next = curr->next;  // Remove current from the list
-            }
-            free(curr);  // Free the memory of the removed subscriber
-            return 0;  // Successfully removed
-        }
-        prev = curr;  // Move prev to current
-        curr = curr->next;  // Move to the next subscriber
-    }
-    return 1;  // Subscription not found
-}*/
+int remove_subscriber(KeyNode *keyNode, int fdNotifPipe) {
+    Subscriber *subscriber = keyNode->subscriber;
+    Subscriber *prev = NULL;
 
+    while (subscriber != NULL) {
+        if (subscriber->fdNotifPipe == fdNotifPipe) {
+            if (prev == NULL) {
+                // Removing the first subscriber
+                keyNode->subscriber = subscriber->next;
+            } else {
+                // Removing a subscriber in the middle or end
+                prev->next = subscriber->next;
+            }
+            free(subscriber);
+            return 0; // Subscriber existed and was removed
+        }
+        prev = subscriber;
+        subscriber = subscriber->next;
+    }
+    return 1; // Subscription not found
+}
 
 void notify_subscribers(KeyNode *keyNode, const char *key, const char *value) {
 	Subscriber *subscriber = keyNode->subscriber;

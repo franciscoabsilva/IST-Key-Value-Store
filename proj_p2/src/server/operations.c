@@ -368,7 +368,7 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 				}
 				return result;
 			}
-			result = remove_subscriber(keyNode->subscriber, (*client)->fdNotif);
+			result = remove_subscriber(keyNode, (*client)->fdNotif);
 			break;
 		}
 		keyNode = keyNode->next;
