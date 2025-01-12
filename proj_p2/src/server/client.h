@@ -7,7 +7,7 @@ typedef struct SubscriptionsKeyNode {
 } SubscriptionsKeyNode;
 
 struct Client {
-    int fd1, fd2, fd3;
+    int fdReq, fdResp, fdNotif;
     SubscriptionsKeyNode *subscriptions;
 	//struct ClientNode *next;
 };

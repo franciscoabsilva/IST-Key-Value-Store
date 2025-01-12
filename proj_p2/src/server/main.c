@@ -301,7 +301,7 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
     opcode[1] = '\0'; 
 	
     if (*opcode != OP_CODE_CONNECT) return 1;
-	
+
 	strncpy(req_pipe, &buffer[1], MAX_PIPE_PATH_LENGTH);
     req_pipe[MAX_PIPE_PATH_LENGTH] = '\0';
 	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
@@ -325,7 +325,7 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 /// @param subscribedKeys 
 /// @param subKeyCount 
 /// @return 1 if CONNECT, SUBSCRIBE, UNSUBSCRIBE, 0 if DISCONNECT, -1 unknown opcode
-int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char opcode,
+int manage_request(struct Client *client, const char opcode,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE],
 				   int *subKeyCount) {
 
@@ -337,7 +337,7 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 
 		case OP_CODE_DISCONNECT: {
 			printf("YUHU KVS DISCONNECT\n"); // ????
-			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+			kvs_disconnect(client, *subKeyCount, subscribedKeys);
 			return 1;
 		}
 
@@ -345,15 +345,15 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			printf("YUHU KVS SUBSCRIBE\n"); // ????
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
-			if(read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
+			if(read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
 				fprintf(stderr, "Failed to read key from requests pipe.\n");
-				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+				kvs_disconnect(client, *subKeyCount, subscribedKeys);
 				return 1;
 			}
 			printf("Subscribed key: %s\n", key); // ????
-			if (kvs_subscribe(key, fdNotifPipe, fdRespPipe)) {
+			if (kvs_subscribe(key, client->fdNotif, client->fdResp)) { // meter == 1 ????? TODO
 				fprintf(stderr, "Failed to subscribe client\n");
-				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+				kvs_disconnect(client, *subKeyCount, subscribedKeys);
 				return 1;
 			}
 			strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
@@ -365,20 +365,20 @@ int manage_request(int fdNotifPipe, int fdReqPipe, int fdRespPipe, const char op
 			printf("YUHU KVS UNUBSCRIBE\n"); // ????
 			char key[KEY_MESSAGE_SIZE];
 			int readingError;
-			if (read_all(fdReqPipe, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
+			if (read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read key from requests pipe. Client was disconnected.\n");
-				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+				kvs_disconnect(client, *subKeyCount, subscribedKeys);
 				return 1;
 			}
 			printf("Unsubscribe key %s\n", key); // ????
 			// FIXME kvs_unsubscribe would be smarter if found directly from the list of subscriptions
-			kvs_unsubscribe(key, fdNotifPipe, fdRespPipe);
+			kvs_unsubscribe(key, client->fdNotif, client->fdResp);
 			// FIXME remove from the list of subscriptions
 			return 0;
 		}
 		default: {
 			fprintf(stderr, "Unrecognized OP Code: %c. Client was disconnected.\n", opcode);
-			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, *subKeyCount, subscribedKeys);
+			kvs_disconnect(client, *subKeyCount, subscribedKeys);
 			return 1;
 		}
 	}
@@ -414,30 +414,31 @@ void *process_client_thread() {
 		if (out == MAX_SESSION_COUNT) out = 0;
 		pthread_mutex_unlock(&clientsBufferMutex);
 		sem_post(&writeSem);
-		
-		int fdReqPipe, fdRespPipe, fdNotifPipe;
-		char opcode = OP_CODE_CONNECT;
 
-		if(kvs_connect(reqPath, respPath, notifPath, &fdReqPipe, &fdRespPipe, &fdNotifPipe) == 1){
+		struct Client *client = NULL;
+
+		if(kvs_connect(reqPath, respPath, notifPath, &client) == 1){
 			fprintf(stderr, "Failed to connect to the server\n");
-			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, 0, NULL);
+			kvs_disconnect(client, 0, NULL);
 			break;
 		}
+
 		// FIXME ha maneiras melhores de fazer isto
 		char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
 		int countSubscribedKeys = 0;
 		int clientStatus = 0;
 		int readingError;
+		char opcode = OP_CODE_CONNECT;
 
 		while (clientStatus != CLIENT_TERMINATED) {
-			if (read_all(fdReqPipe, &opcode, 1, &readingError) <= 0) {
+			if (read_all(client->fdReq, &opcode, 1, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
-				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
+				kvs_disconnect(client, countSubscribedKeys, subscribedKeys);
 				break;
 			}
 			printf("Opcode:%c\n", opcode); // ???? apagar
-			clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
-										subscribedKeys, &countSubscribedKeys);
+			clientStatus = manage_request(client, opcode, subscribedKeys,
+										 &countSubscribedKeys);
 		}
 
 		printf("end of hostthread\n");
@@ -558,6 +559,7 @@ void *process_host_thread(void *arg){
 
 int main(int argc, char *argv[]) {	
 	signal(SIGPIPE, SIG_IGN);
+	
 	sigset_t set;
 	sigemptyset(&set);
 	sigaddset(&set, SIGUSR1);

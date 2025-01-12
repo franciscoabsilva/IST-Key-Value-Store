@@ -365,7 +365,8 @@ int kvs_unsubscribe(const char *key, int fdNotifPipe, int fdRespPipe) {
 	}
 	int result = kvs_aux_unsubscribe(key, fdNotifPipe);
 	const char opcode = OP_CODE_UNSUBSCRIBE;
-	char result_char = result + '0';
+	char result_char = '0';
+	if (result == 1) result_char = '1';
 
 	if(write_to_resp_pipe(fdRespPipe, opcode, result_char) == 1){
 		return 1;
@@ -446,9 +447,9 @@ int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
 	pthread_mutex_lock(&connectedClientsMutex);
 	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
 		if (connectedClients[i] != NULL
-			&& connectedClients[i]->fd1 == fdReqPipe 
-			&& connectedClients[i]->fd2 == fdRespPipe
-			&& connectedClients[i]->fd3 == fdNotifPipe) {
+			&& connectedClients[i]->fdReq == fdReqPipe 
+			&& connectedClients[i]->fdResp == fdRespPipe
+			&& connectedClients[i]->fdNotif == fdNotifPipe) {
 
 			free(connectedClients[i]);
 			connectedClients[i] = NULL;
@@ -461,90 +462,90 @@ int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
 	return 1;
 }
 
-int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, 
-				int *fdReqPipe, int *fdRespPipe, int *fdNotifPipe) {
-	*fdNotifPipe = open(notif_pipe, O_WRONLY);
-	if (*fdNotifPipe < 0) {
+int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client) {
+
+	int fdNotifPipe = open(notif_pipe, O_WRONLY);
+	if (fdNotifPipe < 0) {
 		fprintf(stderr, "Failed to open notifications pipe\n");
 		return 1;
 	}
 
-	*fdReqPipe = open(req_pipe, O_RDONLY);
-	if (*fdReqPipe < 0) {
+	int fdReqPipe = open(req_pipe, O_RDONLY);
+	if (fdReqPipe < 0) {
 		fprintf(stderr, "Failed to open requests pipe\n");
-		if (close(*fdNotifPipe)) {
+		if (close(fdNotifPipe)) {
 			fprintf(stderr, "Failed to close notifications pipe\n");
 		}
 		return 1;
 	}
 
-	*fdRespPipe = open(resp_pipe, O_WRONLY);
-	if (*fdRespPipe < 0) {
+	int fdRespPipe = open(resp_pipe, O_WRONLY);
+	if (fdRespPipe < 0) {
 		fprintf(stderr, "Failed to open responses pipe\n");
-		if (close(*fdNotifPipe) || close(*fdReqPipe)) {
+		if (close(fdNotifPipe) || close(fdReqPipe)) {
 			fprintf(stderr, "Failed to notifications and requests pipes\n");
 		}
 		return 1;
 	}
 
-	struct Client *client = malloc(sizeof(struct Client));
-	if (client == NULL) {
+	*client = malloc(sizeof(struct Client));
+	if (*client == NULL) {
 		fprintf(stderr, "Failed to allocate memory for client\n");
-		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
+		if (close(fdNotifPipe) || close(fdReqPipe) || close(fdRespPipe)) {
 			fprintf(stderr, "Failed to close pipes\n");
 		}
 		return 1;
 	}
-	client->fd1 = *fdReqPipe;
-	client->fd2 = *fdRespPipe;
-	client->fd3 = *fdNotifPipe;
-	client->subscriptions = NULL;
+	(*client)->fdReq = fdReqPipe;
+	(*client)->fdResp = fdRespPipe;
+	(*client)->fdNotif = fdNotifPipe;
+	(*client)->subscriptions = NULL;
 
-	if (add_client(client)) {
+	if (add_client(*client)) {
 		fprintf(stderr, "Failed to add client to list\n");
-		if (close(*fdNotifPipe) || close(*fdReqPipe) || close(*fdRespPipe)) {
+		if (close(fdNotifPipe) || close(fdReqPipe) || close(fdRespPipe)) {
 			fprintf(stderr, "Failed to close pipes\n");
 		}
-		free(client);
+		free(*client);
 		return 1;
 	}
-
+	
 	// ???? apagar
+	write_to_resp_pipe((*client)->fdResp, OP_CODE_CONNECT, '0');
 	fprintf(stdout, "Connected to client: %s\n", req_pipe);
-	write_to_resp_pipe(*fdRespPipe, OP_CODE_CONNECT, '0');
 	return 0;
 }
 
-int kvs_disconnect(int fdRespPipe, int fdReqPipe, int fdNotifPipe, int subCount,
+int kvs_disconnect(struct Client *client, int subCount,
 				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE]) {
 	for (int i = 0; i < subCount; i++) {
-		if(subscribedKeys[i] == NULL){
+		if(subscribedKeys[i] == NULL){ // TODO tirar esta verificação ?????
 			break;
 		}
-		kvs_aux_unsubscribe(subscribedKeys[i], fdNotifPipe);
+		kvs_aux_unsubscribe(subscribedKeys[i], client->fdNotif);
 	}
 
 	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';
-	if (close(fdReqPipe) < 0) {
+	if (close(client->fdReq) < 0) {
 		fprintf(stderr, "Failed to close requests pipe.\n");
 		result = '1';
 	}
 
-	if (close(fdNotifPipe) < 0) {
+	if (close(client->fdNotif) < 0) {
 		fprintf(stderr, "Failed to close notifications pipe.\n");
 		result = '1';
 	}
 
-	if(write_to_resp_pipe(fdRespPipe, OP_CODE_DISCONNECT, result) == 1){
+	if(write_to_resp_pipe(client->fdResp, OP_CODE_DISCONNECT, result) == 1){
 		fprintf(stderr, "Failed to write disconnect response to responses pipe\n");
 	}
 
-	if (close(fdRespPipe) < 0) {
+	if (close(client->fdResp) < 0) {
 		fprintf(stderr, "Failed to close responses pipe.\n");
 	}
 
-	if (remove_client(fdReqPipe, fdRespPipe, fdNotifPipe)) {
+	if (remove_client(client->fdReq, client->fdResp, client->fdNotif)) {
 		fprintf(stderr, "Failed to remove client from the list\n");
 		return 1;
 	}
