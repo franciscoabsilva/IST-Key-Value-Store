@@ -62,4 +62,6 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 
 int kvs_disconnect(struct Client **client);
 
+int disconnect_all_clients();
+
 #endif  // KVS_OPERATIONS_H

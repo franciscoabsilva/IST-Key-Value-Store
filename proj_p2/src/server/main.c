@@ -457,18 +457,26 @@ void handle_SIGUSR1(){
 	sem_post(&writeSem);
 }
 
+void close_all_clients() {
+    pthread_rwlock_wrlock(&globalHashLock);
+
+    for (int i = 0; i < MAX_SESSION_COUNT; i++) clientsBuffer[i] = NULL;
+	disconnect_all_clients();
+
+    pthread_rwlock_unlock(&globalHashLock);
+	printf("All clients disconnected\n");
+}
+
 int restart_clients(){
-	printf("estpi +ronto a ser restarted\n");
+	printf("está pronto a ser restarted\n");
 	in = 0;
 	out = 0;
 	sem_destroy(&readSem);
 	sem_destroy(&writeSem);
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
+	close_all_clients();
 	restartClients = 0;
-
-	//delete_clients();
-
 	return 0;
 }
 
@@ -497,7 +505,8 @@ void *process_host_thread(void *arg){
 
 	in  = 0;
 	out = 0;
-	
+
+	// TODO, PORQUE METER ISTO AQUI E NAO DPS DOS UNLINKS PARA NAO CRIAR CASO HAJA ERROS ?????
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 	pthread_mutex_init(&clientsBufferMutex, NULL);
@@ -575,6 +584,12 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGUSR1, &sa, NULL);
+	/* TODO QUERO METER ISTO EM VEZ DA LINHA ACIMA ?????
+	if (sigaction(SIGUSR1, &sa, NULL) < 0) {
+    	perror("sigaction");
+    	exit(EXIT_FAILURE);
+	}
+	*/
 
 	// FIXME SIGMASK O SIGUSR1
 

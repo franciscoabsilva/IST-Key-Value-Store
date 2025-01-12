@@ -557,3 +557,15 @@ int kvs_disconnect(struct Client **client) {
 	return 0;
 }
 
+int disconnect_all_clients() {
+	pthread_mutex_lock(&connectedClientsMutex);
+	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+		if (connectedClients[i] != NULL) {
+			if (kvs_disconnect(&connectedClients[i])) {
+				fprintf(stderr, "Failed to disconnect client %d\n", i);
+			}
+		}
+	}
+	pthread_mutex_unlock(&connectedClientsMutex);
+	return 0;
+}
