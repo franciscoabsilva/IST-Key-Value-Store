@@ -289,8 +289,30 @@ void *process_thread(void *arg) {
 
 int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe) {
 	int reading_error = 0;
-
-	if(read_all(fdServerPipe, opcode, 1, &reading_error) <= 0
+	char buffer[MAX_PIPE_PATH_LENGTH*3 + 1];
+	if(read_all(fdServerPipe, buffer, MAX_PIPE_PATH_LENGTH*3 + 1, &reading_error) <= 0
+	   || reading_error == 1) {
+		fprintf(stderr, "Failed to read connect message from server pipe\n");
+		return 1;
+	}
+	
+	*opcode = buffer[0];
+    opcode[1] = '\0'; // Null-terminate the opcode string
+    
+    // 2. Next 40 characters into req_pipe
+    strncpy(req_pipe, &buffer[1], MAX_PIPE_PATH_LENGTH);
+    req_pipe[MAX_PIPE_PATH_LENGTH] = '\0'; // Null-terminate the string
+	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
+    // 3. Next 40 characters into resp_pipe
+    strncpy(resp_pipe, &buffer[1 + MAX_PIPE_PATH_LENGTH], MAX_PIPE_PATH_LENGTH);
+    resp_pipe[MAX_PIPE_PATH_LENGTH] = '\0'; // Null-terminate the string
+	printf("Resp Pipe %s.\n", resp_pipe); // ????
+    
+    // 4. Final 40 characters into notif_pipe
+    strncpy(notif_pipe, &buffer[1 + MAX_PIPE_PATH_LENGTH * 2], MAX_PIPE_PATH_LENGTH);
+    notif_pipe[MAX_PIPE_PATH_LENGTH] = '\0'; // Null-terminate the string
+	printf("Notif Pipe %s.\n", notif_pipe); // ????
+	/*if(read_all(fdServerPipe, opcode, 1, &reading_error) <= 0
 	   || reading_error == 1) {
 		fprintf(stderr, "Failed to read OP Code from server pipe\n");
 		return 1;
@@ -320,7 +342,7 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 		fprintf(stderr, "Failed to read notifications pipe path from server pipe\n");
 		return 1;
 	}
-	printf("Notif Pipe %s.\n", notif_pipe); // ????
+	printf("Notif Pipe %s.\n", notif_pipe); // ????*/
 	return 0;
 }
 
@@ -511,11 +533,7 @@ void *process_host_thread(void *arg){
 		return NULL;
 	}
 
-<<<<<<< HEAD
-	int fdServerPipe = open(fifo_path, O_RDWR);
-=======
 	int fdServerPipe = open(fifo_path, O_RDONLY);
->>>>>>> bfe04cbec17b2544fa14074ed6a079b06e7e99da
 	if (fdServerPipe < 0) {
 		fprintf(stderr, "Failed to open server pipe\n");
 		return NULL;
