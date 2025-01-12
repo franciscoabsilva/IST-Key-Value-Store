@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <semaphore.h>
 
+
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
@@ -292,7 +293,6 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 	char buffer[MAX_PIPE_PATH_LENGTH*3 + 1];
 	if(read_all(fdServerPipe, buffer, MAX_PIPE_PATH_LENGTH*3 + 1, &reading_error) <= 0
 	   || reading_error == 1) {
-		fprintf(stderr, "Failed to read connect message from server pipe\n");
 		return 1;
 	}
 	
@@ -558,15 +558,17 @@ void *process_host_thread(void *arg){
 		char req_pipe[MAX_PIPE_PATH_LENGTH];
 		char resp_pipe[MAX_PIPE_PATH_LENGTH];
 		char notif_pipe[MAX_PIPE_PATH_LENGTH];
-
+		
 		if (read_connect_message(fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == 1) {
-			fprintf(stderr, "Failed to read connect message\n");
-			break;
+			sem_post(&writeSem);
+			continue;
 		}
+		
 		struct ClientInfo *newClient = malloc(sizeof(struct ClientInfo));
 		if(newClient == NULL){
 			fprintf(stderr, "Failed to allocate memory for new client\n");
-			break;
+			sem_post(&writeSem);
+			continue;
 		}
 		strcpy(newClient->respFifo, resp_pipe);
 		strcpy(newClient->reqFifo, req_pipe);
@@ -585,6 +587,10 @@ void *process_host_thread(void *arg){
 
 int main(int argc, char *argv[]) {	
 	signal(SIGPIPE, SIG_IGN);
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR1);
+	pthread_sigmask(SIG_BLOCK, &set, NULL);
 
 	// FIXME SIGMASK O SIGUSR1
 
