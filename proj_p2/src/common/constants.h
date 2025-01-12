@@ -1,11 +1,10 @@
-// constantes partilhadas entre cliente e servidor
-#define MAX_SESSION_COUNT 2 // num max de sessoes no server, 1 default, necessario alterar mais tarde
-#define STATE_ACCESS_DELAY_US  // delay a aplicar no server
-#define MAX_PIPE_PATH_LENGTH 40 // tamanho max do caminho do pipe
+// Constants shared between server and client
+#define MAX_SESSION_COUNT 2 // max concurrent client connections
+#define STATE_ACCESS_DELAY_US  // delay to apply on the server
+#define MAX_PIPE_PATH_LENGTH 40
 #define MAX_STRING_SIZE 40
-#define MAX_NUMBER_SUB 10
+#define MAX_NUMBER_SUB 10 
 
-// MARTA CENAS
 #define KEY_MESSAGE_SIZE 41
 #define RESULT_KEY_EXISTS '1'
 #define RESULT_KEY_DOESNT_EXIST '0'
