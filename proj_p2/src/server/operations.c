@@ -377,9 +377,10 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 	if (pthread_rwlock_unlock(&kvs_table->bucketLocks[index])) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
+	return result;
+}
 
-	if (result == 1) return result;
-
+int kvs_remove_subscription(const char *key, struct Client **client){
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
 	SubscriptionsKeyNode *prev = NULL;
 	while (current != NULL) {
@@ -391,14 +392,13 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 			}
 			free(current->key);
 			free(current);
-			return result;
 		}
 		prev = current;
 		current = current->next;
 	}
-
-	return result;
+	return 0;
 }
+
 
 int kvs_unsubscribe(const char *key, struct Client **client) {
 	if(strlen(key) == 0 || strlen(key) > MAX_STRING_SIZE){
@@ -409,6 +409,7 @@ int kvs_unsubscribe(const char *key, struct Client **client) {
 	int result = kvs_aux_unsubscribe(key, client);
 	const char opcode = OP_CODE_UNSUBSCRIBE;
 	char result_char = '0';
+	kvs_remove_subscription(key, client);
 	if (result == 1) result_char = '1';
 
 	if(write_to_resp_pipe((*client)->fdResp, opcode, result_char) == 1){
@@ -417,60 +418,6 @@ int kvs_unsubscribe(const char *key, struct Client **client) {
 	return 0;
 }
 
-/*
-int add_client(ClientNode *client) {
-	pthread_mutex_lock(&connectedClientsMutex);
-    if (clientList == NULL) {
-		clientList = malloc(sizeof(ClientList));
-		if (!clientList) {
-			fprintf(stderr, "Failed to allocate memory for client list\n");
-		} 
-		return 1;
-	}
-    if (clientList->size >= MAX_SESSION_COUNT) {
-        fprintf(stderr, "Client list is full\n");
-        return 1;
-    }
-
-	client->next = clientList->head;
-    clientList->head = client;
-
-    clientList->size++;
-	pthread_mutex_unlock(&connectedClientsMutex);
-    return 0;
-}
-
-int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
-	pthread_mutex_lock(&connectedClientsMutex);
-    if (!clientList || !clientList->head) {
-        fprintf(stderr, "Client list is empty or invalid\n");
-		pthread_mutex_unlock(&connectedClientsMutex);
-        return 1;
-    }
-
-    ClientNode *current = clientList->head;
-    ClientNode *prev = NULL;
-
-    while (current != NULL) {
-        if (current->fd1 == fdReqPipe && current->fd2 == fdRespPipe && current->fd3 == fdNotifPipe) {
-            if (prev == NULL) {
-                clientList->head = current->next;
-            } else {
-                prev->next = current->next;
-            }
-            free(current);
-            clientList->size--;
-			pthread_mutex_unlock(&connectedClientsMutex);
-            return 0;
-        }
-        prev = current;
-        current = current->next;
-    }
-	pthread_mutex_unlock(&connectedClientsMutex);
-    fprintf(stderr, "Client not found in the list\n");
-    return 1;
-}
-*/
 
 int add_client(struct Client *client) {
 	pthread_mutex_lock(&connectedClientsMutex);
