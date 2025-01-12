@@ -465,6 +465,7 @@ int restart_clients(){
 	sem_destroy(&writeSem);
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
+	restartClients = 0;
 
 	//delete_clients();
 
