@@ -28,6 +28,17 @@ int write_correct_size(int fd, const char *message, size_t size) {
 	return write_all(fd, buffer, size);
 }
 
+int write_connect_message(int fdServerPipe, const char *req_pipe_path, const char *resp_pipe_path, const char *notif_pipe_path) {
+	char connectMessage[1 + 3 * MAX_PIPE_PATH_LENGTH];
+	connectMessage[0] = OP_CODE_CONNECT;
+	fill_with_nulls(connectMessage + 1, req_pipe_path, MAX_PIPE_PATH_LENGTH);
+	fill_with_nulls(connectMessage + 1 + MAX_PIPE_PATH_LENGTH, resp_pipe_path, MAX_PIPE_PATH_LENGTH);
+	fill_with_nulls(connectMessage + 1 + 2 * MAX_PIPE_PATH_LENGTH, notif_pipe_path, MAX_PIPE_PATH_LENGTH);
+	// write connect message on server pipe
+	return write_all(fdServerPipe, connectMessage, 1 + 3 * MAX_PIPE_PATH_LENGTH);
+}
+
+
 int read_server_response(int fdResponsePipe, const char expected_OP_Code, char *result) {
 	char opcode;
 	int readingError = 0;
@@ -140,24 +151,10 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	}
 
 	// send connect message to server
-	// FIX ME MUTEX NESTA CENA	
-	const char opcode = OP_CODE_CONNECT;
-	if (write_all(*fdServerPipe, &opcode, 1) == -1) {
-		fprintf(stderr, "Error writing connect OP Code on the server pipe\n");
+	if(write_connect_message(*fdServerPipe, req_pipe_path, resp_pipe_path, notif_pipe_path) == -1) {
+		fprintf(stderr, "Failed to write connect message on server pipe.\n");
+		return 1;
 	}
-
-	if (write_correct_size(*fdServerPipe, req_pipe_path, MAX_PIPE_PATH_LENGTH) == -1) {
-		fprintf(stderr, "Error writing requests pipe path on server pipe\n");
-	}
-
-	if (write_correct_size(*fdServerPipe, resp_pipe_path, MAX_PIPE_PATH_LENGTH) == -1) {
-		fprintf(stderr, "Error writing responses pipe path on server pipe\n");
-	}
-
-	if (write_correct_size(*fdServerPipe, notif_pipe_path, MAX_PIPE_PATH_LENGTH) == -1) {
-		fprintf(stderr, "Error writing notifications pipe path on server pipe\n");
-	}
-	//BYEBYE MUTEX
 	// FIX ME, DISCONNECT IF OPEN RETURNED 1
 
 	*fdNotificationPipe = open(notif_pipe_path, O_RDONLY);

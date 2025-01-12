@@ -402,51 +402,54 @@ void *process_client_thread() {
 		perror("Error blocking SIGUSR1");
 		return NULL;
 	}*/
-	sem_wait(&readSem);
-	pthread_mutex_lock(&clientsBufferMutex);
-	struct ClientInfo *newClient = clientsBuffer[out];
-	out++;
+	while (1) {
+		sem_wait(&readSem);
+		pthread_mutex_lock(&clientsBufferMutex);
+		struct ClientInfo *newClient = clientsBuffer[out];
+		out++;
 
-	char reqPath[MAX_PIPE_PATH_LENGTH];
-	char respPath[MAX_PIPE_PATH_LENGTH];
-	char notifPath[MAX_PIPE_PATH_LENGTH];
+		char reqPath[MAX_PIPE_PATH_LENGTH];
+		char respPath[MAX_PIPE_PATH_LENGTH];
+		char notifPath[MAX_PIPE_PATH_LENGTH];
 
-	strcpy(reqPath, newClient->reqFifo);
-	strcpy(respPath, newClient->respFifo);
-	strcpy(notifPath, newClient->notifFifo);
+		strcpy(reqPath, newClient->reqFifo);
+		strcpy(respPath, newClient->respFifo);
+		strcpy(notifPath, newClient->notifFifo);
 
-	free(newClient);
+		free(newClient);
 
-	if (out == MAX_SESSION_COUNT) out = 0;
-	pthread_mutex_unlock(&clientsBufferMutex);
-	sem_post(&writeSem);
-	
-	int fdReqPipe, fdRespPipe, fdNotifPipe;
-	char opcode = OP_CODE_CONNECT;
+		if (out == MAX_SESSION_COUNT) out = 0;
+		pthread_mutex_unlock(&clientsBufferMutex);
+		sem_post(&writeSem);
+		
+		int fdReqPipe, fdRespPipe, fdNotifPipe;
+		char opcode = OP_CODE_CONNECT;
 
-	if(kvs_connect(reqPath, respPath, notifPath, &fdReqPipe, &fdRespPipe, &fdNotifPipe) == 1){
-		fprintf(stderr, "Failed to connect to the server\n");
-		kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, 0, NULL);
-		return NULL;
-	}
-	// FIXME ha maneiras melhores de fazer isto
-	char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
-	int countSubscribedKeys = 0;
-	int clientStatus = 0;
-	int readingError;
-
-	while (clientStatus != CLIENT_TERMINATED) {
-		if (read_all(fdReqPipe, &opcode, 1, &readingError) <= 0) {
-			fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
-			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
-			return NULL;
+		if(kvs_connect(reqPath, respPath, notifPath, &fdReqPipe, &fdRespPipe, &fdNotifPipe) == 1){
+			fprintf(stderr, "Failed to connect to the server\n");
+			kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, 0, NULL);
+			break;
 		}
-		printf("Opcode:%c\n", opcode); // ???? apagar
-		clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
-									  subscribedKeys, &countSubscribedKeys);
-	}
+		// FIXME ha maneiras melhores de fazer isto
+		char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
+		int countSubscribedKeys = 0;
+		int clientStatus = 0;
+		int readingError;
 
-	printf("end of hostthread\n");
+		while (clientStatus != CLIENT_TERMINATED) {
+			if (read_all(fdReqPipe, &opcode, 1, &readingError) <= 0) {
+				fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
+				kvs_disconnect(fdRespPipe, fdReqPipe, fdNotifPipe, countSubscribedKeys, subscribedKeys);
+				break;
+			}
+			printf("Opcode:%c\n", opcode); // ???? apagar
+			clientStatus = manage_request(fdNotifPipe, fdReqPipe, fdRespPipe, opcode,
+										subscribedKeys, &countSubscribedKeys);
+		}
+
+		printf("end of hostthread\n");
+		break;
+	}
 	return NULL;
 }
 
@@ -480,6 +483,13 @@ void *process_host_thread(void *arg){
 							// return nao faz sentido pq a process thread nunca deve ser terminada
 	}*/
 
+	/*void ignore_sigpipe_in_threads() {
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &signal_set, NULL);
+}*/
+
 	const char *fifo_path = (const char *) arg;
 
 	in  = 0;
@@ -501,7 +511,7 @@ void *process_host_thread(void *arg){
 		return NULL;
 	}
 
-	int fdServerPipe = open(fifo_path, O_RDWR );
+	int fdServerPipe = open(fifo_path, O_RDWR);
 	if (fdServerPipe < 0) {
 		fprintf(stderr, "Failed to open server pipe\n");
 		return NULL;
@@ -553,6 +563,8 @@ void *process_host_thread(void *arg){
 }
 
 int main(int argc, char *argv[]) {	
+	signal(SIGPIPE, SIG_IGN);
+
 	// FIXME SIGMASK O SIGUSR1
 
 	if (!(argc == 5)) {
