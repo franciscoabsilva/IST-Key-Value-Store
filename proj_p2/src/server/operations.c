@@ -380,23 +380,30 @@ int kvs_aux_unsubscribe(const char *key, struct Client **client) {
 	return result;
 }
 
-int kvs_remove_subscription(const char *key, struct Client **client){
-	SubscriptionsKeyNode *current = (*client)->subscriptions;
-	SubscriptionsKeyNode *prev = NULL;
-	while (current != NULL) {
-		if (strcmp(current->key, key) == 0) {
-			if (prev == NULL) {
-				(*client)->subscriptions = current->next;
-			} else {
-				prev->next = current->next;
-			}
-			free(current->key);
-			free(current);
-		}
-		prev = current;
-		current = current->next;
-	}
-	return 0;
+int kvs_remove_subscription(const char *key, struct Client **client) {
+    SubscriptionsKeyNode *current = (*client)->subscriptions;
+    SubscriptionsKeyNode *prev = NULL;
+    
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            // Remove the current node
+            if (prev == NULL) {
+                (*client)->subscriptions = current->next;
+            } else {
+                prev->next = current->next;
+            }
+            SubscriptionsKeyNode *to_free = current; // Save current node for freeing
+            current = current->next; // Advance to the next node
+            free(to_free->key);
+            free(to_free);
+        } else {
+            // Advance both prev and current only when no deletion occurs
+            prev = current;
+            current = current->next;
+        }
+    }
+    
+    return 0;
 }
 
 
@@ -410,6 +417,7 @@ int kvs_unsubscribe(const char *key, struct Client **client) {
 	const char opcode = OP_CODE_UNSUBSCRIBE;
 	char result_char = '0';
 	kvs_remove_subscription(key, client);
+	printf("\n");
 	if (result == 1) result_char = '1';
 
 	if(write_to_resp_pipe((*client)->fdResp, opcode, result_char) == 1){
