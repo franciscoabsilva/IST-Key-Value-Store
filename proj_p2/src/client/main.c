@@ -4,12 +4,56 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
+
 
 #include "parser.h"
 #include "src/client/api.h"
 #include "src/common/constants.h"
 #include "src/common/io.h"
 
+int serverDisconnected = 0;
+
+struct thread_args {
+	int fdNotificationPipe;
+	int fdRequestPipe;
+	int fdResponsePipe;
+};
+
+void *process_notif_thread(void *arg) {
+	struct thread_args *args = (struct thread_args *) arg;
+	int *fdNotificationPipe = &args->fdNotificationPipe;
+	int *fdRequestPipe = &args->fdRequestPipe;
+	int *fdResponsePipe = &args->fdResponsePipe;
+	
+	int readError = 0;
+	int status = 0;
+
+	// FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
+	char key[KEY_MESSAGE_SIZE];
+	char value[KEY_MESSAGE_SIZE];
+	while (1) {
+		status = read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readError);
+		if (status == PIPES_CLOSED) {
+			serverDisconnected = 1;
+			//kvs_disconnect(*fdRequestPipe, NULL, *fdResponsePipe, NULL, *fdNotificationPipe, NULL, -1);
+			//CORRIGIR
+		}
+		if (status == -1 || readError == 1) {
+			fprintf(stderr, "Failed to read key from notifications pipe.\n");
+		}
+
+		status = read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError);
+		if (status == PIPES_CLOSED) {
+			serverDisconnected = 1;
+			//kvs_disconnect(*fdRequestPipe, NULL, *fdResponsePipe, NULL, *fdNotificationPipe, NULL, -1);
+		}
+		if (status == -1 || readError == 1) {
+			fprintf(stderr, "Failed to read key from notifications pipe.\n");
+		}
+		fprintf(stdout, "(%s,%s)\n", key, value);
+	}
+}
 
 int main(int argc, char *argv[]) {
 	if (argc != 3) {
@@ -34,11 +78,17 @@ int main(int argc, char *argv[]) {
 	int fdRequestPipe;
 	int fdResponsePipe;
 	int fdServerPipe;
+
 	if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path,
 					&fdNotificationPipe, &fdRequestPipe, &fdResponsePipe,
 					&fdServerPipe) != 0) {
 		fprintf(stderr, "Failed to connect to the server\n");
 		//FIXME TERMINATE SERVER
+	}
+	struct thread_args args = {fdNotificationPipe, fdRequestPipe, fdResponsePipe};
+	pthread_t notificationsThread;
+	if (pthread_create(&notificationsThread, NULL, process_notif_thread, (void *) (&args))) {
+		fprintf(stderr, "Failed to create thread\n");
 		return 1;
 	}
 
@@ -48,7 +98,7 @@ int main(int argc, char *argv[]) {
 		switch (get_next(STDIN_FILENO)) {
 			case CMD_DISCONNECT:
 				if (kvs_disconnect(fdRequestPipe, req_pipe_path, fdResponsePipe, resp_pipe_path,
-								   fdNotificationPipe, notif_pipe_path, fdServerPipe) != 0) {
+								   fdNotificationPipe, notif_pipe_path, fdServerPipe, notificationsThread) != 0) {
 					fprintf(stderr, "Failed to disconnect to the server\n");
 					return 1;
 				}
@@ -106,7 +156,7 @@ int main(int argc, char *argv[]) {
 				kvs_disconnect(fdRequestPipe, req_pipe_path,
 							   fdResponsePipe, resp_pipe_path,
 							   fdNotificationPipe, notif_pipe_path,
-							   fdServerPipe);
+							   fdServerPipe, notificationsThread);
 				break;
 		}
 	}

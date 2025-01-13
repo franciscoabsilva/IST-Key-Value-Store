@@ -454,12 +454,11 @@ void *process_client_thread() {
 void handle_SIGUSR1(){
 	// FIXME mutex?
 	printf("SIGUSR1 received\n");
-	sig_safe_close_clients();
 	restartClients = 1;
 	sem_post(&writeSem);
 }
 
-void close_all_clients() {
+void clean_client_buffer() {
     pthread_rwlock_wrlock(&globalHashLock);
     for (int i = 0; i < MAX_SESSION_COUNT; i++) clientsBuffer[i] = NULL;
     pthread_rwlock_unlock(&globalHashLock);
@@ -474,8 +473,8 @@ int restart_clients(){
 	sem_destroy(&writeSem);
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
-	remove_all_subscriptions();
-	close_all_clients();
+	clean_all_clients();	
+	clean_client_buffer();
 	restartClients = 0;
 	return 0;
 }
@@ -630,6 +629,7 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "Failed to initialize lock\n");
 	}
 
+
 	pthread_t thread[MAX_THREADS];
 	struct ThreadArgs args = {dir, directory_path, &backupCounter};
 	for (unsigned int i = 0; i < MAX_THREADS; i++) {
@@ -637,7 +637,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "Failed to create thread\n");
 		}
 	}
-
+	
 	// create thread that deals with clients	
 	pthread_t host_thread;
 	if (pthread_create(&host_thread, NULL, process_host_thread, (void *) fifo_path)) {

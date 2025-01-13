@@ -556,19 +556,24 @@ int kvs_disconnect(struct Client **client) {
 
 	return 0;
 }
-int sig_safe_close_clients(){
+
+
+int clean_all_clients() {
 	pthread_mutex_lock(&connectedClientsMutex);
 	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
 		if (connectedClients[i] != NULL) {
-			close(connectedClients[i]->fdReq);
-			close(connectedClients[i]->fdResp);
-			close(connectedClients[i]->fdNotif);
+			if (kvs_disconnect(&connectedClients[i]) == 1) {
+				fprintf(stderr, "Failed to disconnect client\n");
+			}
+			free(connectedClients[i]);
+			connectedClients[i] = NULL;
 		}
 	}
 	pthread_mutex_unlock(&connectedClientsMutex);
 	return 0;
 }
 
+/*
 int clean_subscriptions(struct Client **client){
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
 	while (current != NULL) {
@@ -597,4 +602,4 @@ int remove_all_subscriptions() {
 	}
 	pthread_mutex_unlock(&connectedClientsMutex);
 	return 0;
-}
+}*/

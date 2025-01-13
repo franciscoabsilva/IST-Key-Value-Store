@@ -13,8 +13,6 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-pthread_t notificationsThread;
-
 
 /// @brief Writes a given message to a file descriptor, 
 ///        filling the rest of the buffer with nulls.
@@ -28,7 +26,17 @@ int write_correct_size(int fd, const char *message, size_t size) {
 	return write_all(fd, buffer, size);
 }
 
-int write_connect_message(int fdServerPipe, const char *req_pipe_path, const char *resp_pipe_path, const char *notif_pipe_path) {
+/// @brief Writes a connect message to the server pipe.
+/// @param fdServerPipe File descriptor of the server pipe.
+/// @param req_pipe_path Path to the request pipe.
+/// @param resp_pipe_path Path to the response pipe.
+/// @param notif_pipe_path Path to the notification pipe.
+/// @return on success, returns 1, on error, returns -1
+int write_connect_message(int fdServerPipe,
+						 const char *req_pipe_path,
+						 const char *resp_pipe_path,
+						 const char *notif_pipe_path) {
+
 	char connectMessage[1 + 3 * MAX_PIPE_PATH_LENGTH];
 	connectMessage[0] = OP_CODE_CONNECT;
 	fill_with_nulls(connectMessage + 1, req_pipe_path, MAX_PIPE_PATH_LENGTH);
@@ -38,7 +46,11 @@ int write_connect_message(int fdServerPipe, const char *req_pipe_path, const cha
 	return write_all(fdServerPipe, connectMessage, 1 + 3 * MAX_PIPE_PATH_LENGTH);
 }
 
-
+/// @brief Reads a response from the server pipe.
+/// @param fdResponsePipe File descriptor of the response pipe.
+/// @param expected_OP_Code Expected OP Code.
+/// @param result Result of the operation.
+/// @return 0 if the operation was successful, 1 otherwise.
 int read_server_response(int fdResponsePipe, const char expected_OP_Code, char *result) {
 	char opcode;
 	int readingError = 0;
@@ -81,26 +93,6 @@ int read_server_response(int fdResponsePipe, const char expected_OP_Code, char *
 	}
 	fprintf(stdout, "Server returned %c for operation: %s\n", *result, opName);
 	return 0;
-}
-
-void *process_notif_thread(void *arg) {
-	const int *fdNotificationPipe = (const int *) arg;
-	int readError = 0;
-
-	// FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
-	char key[KEY_MESSAGE_SIZE];
-	char value[KEY_MESSAGE_SIZE];
-	while (1) {
-		if (read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readError) <= 0
-			|| readError == 1) {
-			pthread_exit(NULL);
-		}
-		if (read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError) <= 0
-			|| readError == 1) {
-			pthread_exit(NULL);
-		}
-		fprintf(stdout, "(%s,%s)\n", key, value);
-	}
 }
 
 
@@ -176,11 +168,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	}
 	
 
-	if (pthread_create(&notificationsThread, NULL, process_notif_thread, (void *) (fdNotificationPipe))) {
-		fprintf(stderr, "Failed to create thread\n");
-		return 1;
-	} // TODO FECHAR ISTO NO DISCONNECT
-
 	// read response from server
 	// FIX ME disconnect in case of an error
 	const char expected_OP_Code = OP_CODE_CONNECT;
@@ -194,7 +181,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
 				   int fdNotification, const char *notif_pipe_path,
-				   int fdServerPipe) {
+				   int fdServerPipe, pthread_t notificationsThread) {
 
 	// send disconnect message to server
 	const char opcode = OP_CODE_DISCONNECT;
@@ -233,10 +220,6 @@ int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 		fprintf(stderr, "Client failed to unlink notifications pipe.\n");
 	}
 
-	if (close(fdServerPipe) < 0) {
-		fprintf(stderr, "Client failed to close server pipe.\n");
-	}
-
 	if (close(fdResponsePipe) < 0) {
 		fprintf(stderr, "Client failed to close responses pipe.\n");
 	}
@@ -245,6 +228,7 @@ int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 		fprintf(stderr, "Client failed to unlink responses pipe.\n");
 	}
 
+	close(fdServerPipe);
 	return 0;
 }
 

@@ -8,3 +8,4 @@
 #define KEY_MESSAGE_SIZE 41
 #define RESULT_KEY_EXISTS '1'
 #define RESULT_KEY_DOESNT_EXIST '0'
+#define PIPES_CLOSED  0

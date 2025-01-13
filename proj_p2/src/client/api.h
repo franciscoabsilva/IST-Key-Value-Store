@@ -2,6 +2,11 @@
 #define CLIENT_API_H
 
 #include <stddef.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <pthread.h>
+
 #include "src/common/constants.h"
 
 /// Connects to a kvs server.
@@ -30,7 +35,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
 				   int fdNotification, const char *notif_pipe_path,
-				   int fdServerPipe);
+				   int fdServerPipe, pthread_t notificationsThread);
 
 /// Requests a subscription for a key
 /// @param fdRequestPipe FFile descriptor of the requests pipe.
