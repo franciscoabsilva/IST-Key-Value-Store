@@ -417,14 +417,11 @@ void *process_client_thread() {
 		status = 0;
 
 		while (clientStatus != CLIENT_TERMINATED) {
-			errno = 0;
 			status = read_all(client->fdReq, &opcode, 1, &readingError);
 			if (status != 1) {
 				if(status == -1 || readingError){
 					fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
 				}
-				printf("%d", errno);
-				if(errno == EBADF) break;
 				kvs_disconnect(&client);
 				break;
 			}
