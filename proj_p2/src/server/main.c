@@ -47,7 +47,9 @@ sem_t writeSem;
 
 // reading index for the clientsBuffer
 int in, out;
-int restartClients = 0;
+
+static int disconnectControl = 0;
+static int restartClients = 0;
 
 void *process_thread(void *arg) {
 	sigset_t set;
@@ -342,11 +344,13 @@ int manage_request(struct Client *client, const char opcode) {
 			int readingError = 0;
 			if(read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
 				fprintf(stderr, "Failed to read key from requests pipe.\n");
+				if (disconnectControl) return 1;
 				kvs_disconnect(&client);
 				return 1;
 			}
 			if (kvs_subscribe(key, &client)) {
 				fprintf(stderr, "Failed to subscribe client\n");
+				if (disconnectControl) return 1;
 				kvs_disconnect(&client);
 				return 1;
 			}
@@ -358,6 +362,7 @@ int manage_request(struct Client *client, const char opcode) {
 			int readingError = 0;
 			if (read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read key from requests pipe. Client was disconnected.\n");
+				if (disconnectControl) return 1;
 				kvs_disconnect(&client);
 				return 1;
 			}
@@ -366,6 +371,7 @@ int manage_request(struct Client *client, const char opcode) {
 		}
 		default: {
 			fprintf(stderr, "Unrecognized OP Code: %c. Client was disconnected.\n", opcode);
+			if (disconnectControl) return 1;
 			kvs_disconnect(&client);
 			return 1;
 		}
@@ -418,6 +424,7 @@ void *process_client_thread() {
 
 		while (clientStatus != CLIENT_TERMINATED) {
 			status = read_all(client->fdReq, &opcode, 1, &readingError);
+			if (disconnectControl) break;
 			if (status != 1) {
 				if(status == -1 || readingError){
 					fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
@@ -431,8 +438,8 @@ void *process_client_thread() {
 	return NULL;
 }
 
-
 void handle_SIGUSR1(){
+	disconnectControl = 1;
 	restartClients = 1;
 	sem_post(&writeSem);
 }
@@ -503,11 +510,11 @@ void *process_host_thread(void *arg){
 			restart_clients();
 			continue;
 		} 
-		
 		if (read_connect_message(fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == 1) {
 			sem_post(&writeSem);
 			continue;
 		}
+		disconnectControl = 0;
 
 		struct ClientInfo *newClient = malloc(sizeof(struct ClientInfo));
 		if(newClient == NULL){
