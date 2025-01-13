@@ -433,11 +433,15 @@ void *process_client_thread() {
 		int clientStatus = 0;
 		int readingError = 0;
 		char opcode = OP_CODE_CONNECT;
+		int status = 0;
 
 		while (clientStatus != CLIENT_TERMINATED) {
-			if (read_all(client->fdReq, &opcode, 1, &readingError) <= 0) {
-				fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
-				kvs_disconnect(&client);
+			status = read_all(client->fdReq, &opcode, 1, &readingError);
+			if (status != 1) {
+				if(status == -1 || readingError){
+					fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
+					kvs_disconnect(&client);
+				}
 				break;
 			}
 			printf("Opcode:%c\n", opcode); // ???? apagar
@@ -458,27 +462,11 @@ void handle_SIGUSR1(){
 	sem_post(&writeSem);
 }
 
-void clean_client_buffer() {
-    pthread_rwlock_wrlock(&globalHashLock);
-	// TODO ISTO NAO FAZ SENTIDO NENHUM ????
-    for (int i = 0; i < MAX_SESSION_COUNT; i++) clientsBuffer[i] = NULL;
-    pthread_rwlock_unlock(&globalHashLock);
-	printf("All clients disconnected\n");
-}
-
 int restart_clients(){
-	printf("está pronto a ser restarted\n");
-	in = 0;
-	out = 0;
-	sem_destroy(&readSem);
-	sem_destroy(&writeSem);	
-	sem_init(&readSem, 0, 0);
-	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
-	printf("10");
-	clean_all_clients();	
-	printf("heyo\n");
-	clean_client_buffer();
+	clean_all_clients();
+	printf("heyoa\n"); //TODO APAGAR
 	restartClients = 0;
+	sem_wait(&writeSem);
 	return 0;
 }
 
@@ -546,7 +534,10 @@ void *process_host_thread(void *arg){
 	while (1) {
 		sem_wait(&writeSem);
 		
-		if(restartClients) restart_clients();
+		if(restartClients){
+			restart_clients();
+			continue;
+		} 
 
 		char opCode;
 		char req_pipe[MAX_PIPE_PATH_LENGTH];

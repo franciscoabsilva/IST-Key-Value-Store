@@ -147,6 +147,10 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 		fprintf(stderr, "Failed to write connect message on server pipe.\n");
 		return 1;
 	}
+
+	if(close(*fdServerPipe) < 0) {
+		fprintf(stderr, "Client could not close server pipe.\n");
+	}
 	// FIX ME, DISCONNECT IF OPEN RETURNED 1
 
 	*fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
@@ -158,7 +162,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	*fdRequestPipe = open(req_pipe_path, O_WRONLY);
 	if (*fdRequestPipe < 0) {
 		fprintf(stderr, "Client could not open request pipe.\n");
-		if(close(*fdNotificationPipe) || close(*fdServerPipe)) {
+		if(close(*fdNotificationPipe)) {
 			fprintf(stderr, "Client could not close pipes.\n");
 		}
 		return 1;
@@ -167,7 +171,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	*fdResponsePipe = open(resp_pipe_path, O_RDONLY);
 	if (*fdResponsePipe < 0) {
 		fprintf(stderr, "Client could not open response pipe.\n");
-		if(close(*fdNotificationPipe) || close(*fdRequestPipe) || close(*fdServerPipe)) {
+		if(close(*fdNotificationPipe) || close(*fdRequestPipe)) {
 			fprintf(stderr, "Client could not close pipes.\n");
 		}
 		return 1;
@@ -182,9 +186,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 		fprintf(stderr, "Failed to read connect message from response pipe.\n");
 	}
 
-	if(close(*fdServerPipe) < 0) {
-		fprintf(stderr, "Client could not close server pipe.\n");
-	}
 	return 0;
 }
 

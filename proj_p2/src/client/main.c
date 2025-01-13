@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
 	unsigned int delay_ms;
 	size_t num;
 
-	strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
+	strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char)); //TODO mudar para MEMCOPY
 	strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
 	strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
 	char *server_pipe_path = argv[2];
@@ -91,6 +91,9 @@ int main(int argc, char *argv[]) {
 	if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path, notif_pipe_path,
 					&fdNotificationPipe, &fdRequestPipe, &fdResponsePipe,
 					&fdServerPipe) != 0) {
+		if(close(fdServerPipe)){
+			fprintf(stderr, "Failed to close server pipe\n");
+		}
 		fprintf(stderr, "Failed to connect to the server\n");
 		return 1;
 	}
