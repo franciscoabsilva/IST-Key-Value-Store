@@ -454,7 +454,6 @@ int restart_clients(){
 	clean_all_clients();
 	printf("entered restar clients\n"); //TODO APAGAR
 	restartClients = 0;
-	sem_wait(&writeSem);
 	return 0;
 }
 
