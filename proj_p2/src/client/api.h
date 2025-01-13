@@ -23,6 +23,10 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 				int *fdNotificationPipe, int *fdRequestPipe, int *fdResponsePipe,
 				int *fdServerPipe);
 
+void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
+				   int fdResponsePipe, const char *resp_pipe_path,
+				   int fdNotification, const char *notif_pipe_path);
+
 /// Disconnects from an KVS server.
 /// @param fdRequestPipe FFile descriptor of the requests pipe.
 /// @param req_pipe_path Path to the pipe for requests.
@@ -35,7 +39,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
 				   int fdNotification, const char *notif_pipe_path,
-				   int fdServerPipe, pthread_t notificationsThread);
+				   pthread_t notificationsThread);
 
 /// Requests a subscription for a key
 /// @param fdRequestPipe FFile descriptor of the requests pipe.

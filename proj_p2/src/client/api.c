@@ -158,12 +158,18 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	*fdRequestPipe = open(req_pipe_path, O_WRONLY);
 	if (*fdRequestPipe < 0) {
 		fprintf(stderr, "Client could not open request pipe.\n");
+		if(close(*fdNotificationPipe) || close(*fdServerPipe)) {
+			fprintf(stderr, "Client could not close pipes.\n");
+		}
 		return 1;
 	}
 
 	*fdResponsePipe = open(resp_pipe_path, O_RDONLY);
 	if (*fdResponsePipe < 0) {
 		fprintf(stderr, "Client could not open response pipe.\n");
+		if(close(*fdNotificationPipe) || close(*fdRequestPipe) || close(*fdServerPipe)) {
+			fprintf(stderr, "Client could not close pipes.\n");
+		}
 		return 1;
 	}
 	
@@ -175,35 +181,16 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	if (read_server_response(*fdResponsePipe, expected_OP_Code, &result) == 1) {
 		fprintf(stderr, "Failed to read connect message from response pipe.\n");
 	}
+
+	if(close(*fdServerPipe) < 0) {
+		fprintf(stderr, "Client could not close server pipe.\n");
+	}
 	return 0;
 }
 
-int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
+void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
-				   int fdNotification, const char *notif_pipe_path,
-				   int fdServerPipe, pthread_t notificationsThread) {
-
-	// send disconnect message to server
-	const char opcode = OP_CODE_DISCONNECT;
-	if (write_all(fdRequestPipe, &opcode, 1) == -1) {
-		fprintf(stderr, "Error writing disconnect OP Code on the server pipe\n");
-	}
-	// read for response from server
-	char result = 'a';
-
-	if (read_server_response(fdResponsePipe, OP_CODE_DISCONNECT, &result) == 1) {
-		fprintf(stderr, "Failed to read disconnect response from server.\n");
-	}
-
-	if (pthread_cancel(notificationsThread)) {
-		fprintf(stderr, "Failed to cancel notification thread\n");
-	}
-
-	if (pthread_join(notificationsThread, NULL)) {
-		fprintf(stderr, "Failed to join notification thread\n");
-	}
-
-	// close pipes and unlink pipe files
+				   int fdNotification, const char *notif_pipe_path) {
 	if (close(fdRequestPipe) < 0) {
 		fprintf(stderr, "Client failed to close requests pipe.\n");
 	}
@@ -227,10 +214,40 @@ int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
 	if (unlink(resp_pipe_path)) {
 		fprintf(stderr, "Client failed to unlink responses pipe.\n");
 	}
+}
 
-	close(fdServerPipe);
+int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
+				   int fdResponsePipe, const char *resp_pipe_path,
+				   int fdNotification, const char *notif_pipe_path,
+				   pthread_t notificationsThread) {
+
+	// send disconnect message to server
+	const char opcode = OP_CODE_DISCONNECT;
+	if (write_all(fdRequestPipe, &opcode, 1) == -1) {
+		fprintf(stderr, "Error writing disconnect OP Code on the server pipe\n");
+	}
+	// read for response from server
+	char result = 'a';
+
+	if (read_server_response(fdResponsePipe, OP_CODE_DISCONNECT, &result) == 1) {
+		fprintf(stderr, "Failed to read disconnect response from server.\n");
+	}
+
+	if (pthread_cancel(notificationsThread)) {
+		fprintf(stderr, "Failed to cancel notification thread\n");
+	}
+
+	if (pthread_join(notificationsThread, NULL)) {
+		fprintf(stderr, "Failed to join notification thread\n");
+	}
+
+	// close pipes and unlink pipe files
+	terminate_pipes(fdRequestPipe, req_pipe_path, fdResponsePipe,
+					resp_pipe_path, fdNotification, notif_pipe_path);
 	return 0;
 }
+
+
 
 int kvs_subscribe(int fdRequestPipe, int fdResponsePipe, const char *key) {
 
