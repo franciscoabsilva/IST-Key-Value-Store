@@ -384,7 +384,7 @@ void *process_client_thread() {
     pthread_sigmask(SIG_BLOCK, &set, NULL);
 
 	while (1) {
-		// Read from procudecr consumer buffer
+		// Read from producer consumer buffer
 		sem_wait(&readSem);
 		pthread_mutex_lock(&clientsBufferMutex);
 
@@ -410,9 +410,9 @@ void *process_client_thread() {
 		int status = kvs_connect(reqPath, respPath, notifPath, &client);
 		if(status){
 			fprintf(stderr, "Failed to connect to the server\n");
-			if(status == -1) break; // could not allocate client
+			if(status == -1) continue; // could not allocate client
 			kvs_disconnect(&client);
-			break;
+			continue;
 		}
 
 		int clientStatus = 0;
@@ -425,8 +425,8 @@ void *process_client_thread() {
 			if (status != 1) {
 				if(status == -1 || readingError){
 					fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
-					kvs_disconnect(&client);
 				}
+				kvs_disconnect(&client);
 				break;
 			}
 			printf("Opcode:%c\n", opcode); // ???? apagar

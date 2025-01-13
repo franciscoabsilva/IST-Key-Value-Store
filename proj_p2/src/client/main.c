@@ -79,9 +79,14 @@ int main(int argc, char *argv[]) {
 	unsigned int delay_ms;
 	size_t num;
 
-	strncat(req_pipe_path, argv[1], strlen(argv[1]) * sizeof(char)); //TODO mudar para MEMCOPY
-	strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
-	strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
+    memcpy(req_pipe_path + strlen(req_pipe_path), argv[1], strlen(argv[1]));
+    memcpy(resp_pipe_path + strlen(resp_pipe_path), argv[1], strlen(argv[1]));
+    memcpy(notif_pipe_path + strlen(notif_pipe_path), argv[1], strlen(argv[1]));
+
+    req_pipe_path[strlen(req_pipe_path) + strlen(argv[1])] = '\0';
+    resp_pipe_path[strlen(resp_pipe_path) + strlen(argv[1])] = '\0';
+    notif_pipe_path[strlen(notif_pipe_path) + strlen(argv[1])] = '\0';
+
 	char *server_pipe_path = argv[2];
 
 	int fdNotificationPipe;
