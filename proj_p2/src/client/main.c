@@ -117,8 +117,7 @@ int main(int argc, char *argv[]) {
 	while (!serverDisconnected) {
 		switch (get_next(STDIN_FILENO)) {
 			case CMD_DISCONNECT:
-				if (kvs_disconnect(fdRequestPipe, req_pipe_path, fdResponsePipe, resp_pipe_path,
-								   fdNotificationPipe, notif_pipe_path, notificationsThread) != 0) {
+				if (kvs_disconnect(fdRequestPipe, fdResponsePipe, notificationsThread)) {
 					fprintf(stderr, "Failed to disconnect to the server\n");
 					return 1;
 				}
@@ -173,10 +172,9 @@ int main(int argc, char *argv[]) {
 			case EOC:
 				// input should end in a disconnect, or it will loop here forever
 				// FIXME esta tarefa é que termina a fifo de notificações!
-				kvs_disconnect(fdRequestPipe, req_pipe_path,
-							   fdResponsePipe, resp_pipe_path,
-							   fdNotificationPipe, notif_pipe_path,
-							   notificationsThread);
+				if(kvs_disconnect(fdRequestPipe, fdResponsePipe, notificationsThread)) {
+					fprintf(stderr, "Failed to disconnect from server.\n");
+				}
 				break;
 		}
 	}

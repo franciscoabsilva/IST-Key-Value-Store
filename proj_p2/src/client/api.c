@@ -218,35 +218,29 @@ void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
 	}
 }
 
-int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
-				   int fdResponsePipe, const char *resp_pipe_path,
-				   int fdNotification, const char *notif_pipe_path,
+int kvs_disconnect(int fdRequestPipe, int fdResponsePipe, 
 				   pthread_t notificationsThread) {
-
+	int error = 0;
 	// send disconnect message to server
 	const char opcode = OP_CODE_DISCONNECT;
 	if (write_all(fdRequestPipe, &opcode, 1) == -1) {
 		fprintf(stderr, "Error writing disconnect OP Code on the server pipe\n");
+		error = 1;
 	}
-	// read for response from server
-	char result = 'a';
 
+	// read for response from server
+	char result;
 	if (read_server_response(fdResponsePipe, OP_CODE_DISCONNECT, &result) == 1) {
 		fprintf(stderr, "Failed to read disconnect response from server.\n");
-	}
-
-	if (pthread_cancel(notificationsThread)) {
-		fprintf(stderr, "Failed to cancel notification thread\n");
+		error = 1;
 	}
 
 	if (pthread_join(notificationsThread, NULL)) {
 		fprintf(stderr, "Failed to join notification thread\n");
+		error = 1;
 	}
 
-	// close pipes and unlink pipe files
-	terminate_pipes(fdRequestPipe, req_pipe_path, fdResponsePipe,
-					resp_pipe_path, fdNotification, notif_pipe_path);
-	return 0;
+	return error;
 }
 
 

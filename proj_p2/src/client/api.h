@@ -29,16 +29,10 @@ void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
 
 /// Disconnects from an KVS server.
 /// @param fdRequestPipe FFile descriptor of the requests pipe.
-/// @param req_pipe_path Path to the pipe for requests.
 /// @param fdResponsePipe File descriptor of the responses pipe.
-/// @param resp_pipe_path Path to the pipe for responses.
-/// @param fdNotification File descriptor of the notifications pipe.
-/// @param notif_pipe_path Path to the pipe for notifications.
-/// @param fdServerPipe File descriptor for the pipe for the server.
-/// @return 0 in case of success, 1 otherwise.
-int kvs_disconnect(int fdRequestPipe, const char *req_pipe_path,
-				   int fdResponsePipe, const char *resp_pipe_path,
-				   int fdNotification, const char *notif_pipe_path,
+/// @param notificationsThread Thread das notifications.
+/// @return 0 if sucess, 1 otherwise.
+int kvs_disconnect(int fdRequestPipe, int fdResponsePipe, 
 				   pthread_t notificationsThread);
 
 /// Requests a subscription for a key
