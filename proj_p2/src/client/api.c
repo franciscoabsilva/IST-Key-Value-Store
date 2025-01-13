@@ -193,7 +193,7 @@ void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
 				   int fdNotification, const char *notif_pipe_path) {
 	printf("fui\n");
-	if (close(fdRequestPipe) < 0) {
+	if(close(fdRequestPipe)  < 0){
 		fprintf(stderr, "Client failed to close requests pipe.\n");
 	}
 

@@ -415,9 +415,8 @@ int kvs_unsubscribe(const char *key, struct Client **client) {
 	// Remove the key from the client's subscription list
 	client_remove_subscription(key, client);
 
-	// Remove the client from the key's subscriber list
-	char result_char = '0';
-	if (kvs_aux_unsubscribe(key, client)) result_char = '1';
+	// Remove the client from the key's subscriber list on the kvs table
+	char result_char = (kvs_aux_unsubscribe(key, client) ? '1' : '0');
 
 	const char opcode = OP_CODE_UNSUBSCRIBE;
 	if(write_to_resp_pipe((*client)->fdResp, opcode, result_char) == 1){
@@ -514,9 +513,7 @@ void kvs_disconnect(struct Client **client) {
 	// Unsubscribe all keys
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
 	while (current != NULL) {
-		if (kvs_aux_unsubscribe(current->key, client) == 1) {
-			fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
-		}
+		kvs_aux_unsubscribe(current->key, client);
 		SubscriptionsKeyNode *next = current->next;
 		free(current->key);
 		free(current);
@@ -558,9 +555,7 @@ int clean_all_clients() {
 		if (connectedClients[i] == NULL) continue;
 		SubscriptionsKeyNode *current = connectedClients[i]->subscriptions;
 		while (current != NULL) {
-			if (kvs_aux_unsubscribe(current->key, &connectedClients[i]) == 1) {
-				fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
-			}
+			kvs_aux_unsubscribe(current->key, &connectedClients[i]);
 			SubscriptionsKeyNode *next = current->next;
 			free(current->key);
 			free(current);
