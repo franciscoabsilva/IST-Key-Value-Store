@@ -417,11 +417,14 @@ void *process_client_thread() {
 		status = 0;
 
 		while (clientStatus != CLIENT_TERMINATED) {
+			errno = 0;
 			status = read_all(client->fdReq, &opcode, 1, &readingError);
 			if (status != 1) {
 				if(status == -1 || readingError){
 					fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
 				}
+				printf("%d", errno);
+				if(errno == EBADF) break;
 				kvs_disconnect(&client);
 				break;
 			}
@@ -449,6 +452,9 @@ void *process_host_thread(void *arg){
     sigaddset(&set, SIGUSR1);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
+	pid_t pid = getpid();
+	printf("PID: %d\n", pid); // ???? TODO TIRAR
+
 	const char *fifo_path = (const char *) arg;
 
 	in  = 0;
@@ -465,15 +471,19 @@ void *process_host_thread(void *arg){
 		return NULL;
 	}
 
-	int fdServerPipe = open(fifo_path, O_RDONLY);
-	if (fdServerPipe < 0) {
-		fprintf(stderr, "Failed to open server pipe\n");
-		return NULL;
-	}
-
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 	pthread_mutex_init(&clientsBufferMutex, NULL);
+
+	int fdServerPipe = open(fifo_path, O_RDONLY);
+	if (fdServerPipe < 0) {
+		fprintf(stderr, "Failed to open server pipe\n");
+		if (pthread_mutex_destroy(&clientsBufferMutex)) 
+			fprintf(stderr, "Failed to destroy clientsBufferMutex\n");
+		if (sem_destroy(&readSem) == -1 || sem_destroy(&writeSem)) 
+			fprintf(stderr, "Failed to destroy semaphores\n");
+		return NULL;
+	}
 
 	// Create threads to deal with clients
 	pthread_t thread[MAX_SESSION_COUNT];
@@ -482,7 +492,6 @@ void *process_host_thread(void *arg){
 			fprintf(stderr, "Failed to create thread\n");
 		}
 	}
-
 
 	char opCode;
 	char req_pipe[MAX_PIPE_PATH_LENGTH];
@@ -541,7 +550,6 @@ int main(int argc, char *argv[]) {
 	unsigned int backupCounter = (unsigned int) strtoul(argv[2], NULL, 10);
 	unsigned int MAX_THREADS = (unsigned int) strtoul(argv[3], NULL, 10);
 	const char *fifo_path = argv[4];
-
 
 	DIR *dir = opendir(directory_path);
 

@@ -521,25 +521,25 @@ void kvs_disconnect(struct Client **client) {
 
 	char result = '0';
 	if (close((*client)->fdReq) < 0) {
-		fprintf(stderr, "Failed to close requests pipe.\n");
+		fprintf(stderr, "kvs_disconnect: Failed to close requests pipe.\n");
 		result = '1';
 	}
 
 	if (close((*client)->fdNotif) < 0) {
-		fprintf(stderr, "Failed to close notifications pipe.\n");
+		fprintf(stderr, "kvs_disconnect: Failed to close from notifications pipe.\n");
 		result = '1';
 	}
 
 	if(write_to_resp_pipe((*client)->fdResp, OP_CODE_DISCONNECT, result) == 1) {
-		fprintf(stderr, "Failed to write disconnect response to responses pipe\n");
+		fprintf(stderr, "kvs_disconnect: Failed to write disconnect response to responses pipe\n");
 	}
 
 	if (close((*client)->fdResp) < 0) {
-		fprintf(stderr, "Failed to close responses pipe.\n");
+		fprintf(stderr, "kvs_disconnect: Failed to close responses pipe.\n");
 	}
 
 	if (remove_client((*client)->fdReq, (*client)->fdResp, (*client)->fdNotif)) {
-		fprintf(stderr, "Failed to remove client from the list\n");
+		fprintf(stderr, "kvs_disconnect: Failed to remove client from the list\n");
 	}
 }
 
