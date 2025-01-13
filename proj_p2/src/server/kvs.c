@@ -137,25 +137,40 @@ int delete_pair(HashTable *ht, const char *key) {
 }
 
 int add_subscriber(KeyNode *keyNode, int fdNotifPipe) {
-	if (keyNode == NULL) {
-		fprintf(stderr, "Error: KeyNode is NULL.\n");
-		return -1;
-	}
-	while (keyNode->subscriber != NULL) {
-		if (keyNode->subscriber->fdNotifPipe == fdNotifPipe) {
-			return 1; // Subscriber already exists
-		}
-		keyNode->subscriber = keyNode->subscriber->next;
-	}
-	Subscriber *newSubscriber = malloc(sizeof(Subscriber));
-	if (newSubscriber == NULL) {
-		fprintf(stderr, "Error: Allocating subscriber.\n");
-		return -1;
-	}
-	newSubscriber->fdNotifPipe = fdNotifPipe;
-	newSubscriber->next = keyNode->subscriber;
-	keyNode->subscriber = newSubscriber;
-	return 0;
+    if (keyNode == NULL) {
+        fprintf(stderr, "Error: KeyNode is NULL.\n");
+        return -1;
+    }
+
+    Subscriber *current = keyNode->subscriber;
+    Subscriber *prev = NULL;
+
+    // Traverse the list to check if the subscriber already exists
+    while (current != NULL) {
+        if (current->fdNotifPipe == fdNotifPipe) {
+            return 1; // Subscriber already exists
+        }
+        prev = current;
+        current = current->next;
+    }
+
+    // Allocate a new subscriber
+    Subscriber *newSubscriber = malloc(sizeof(Subscriber));
+    if (newSubscriber == NULL) {
+        fprintf(stderr, "Error: Allocating subscriber.\n");
+        return -1;
+    }
+    newSubscriber->fdNotifPipe = fdNotifPipe;
+    newSubscriber->next = NULL;
+
+    // Add the new subscriber to the end of the list
+    if (prev == NULL) {
+        // The list was empty
+        keyNode->subscriber = newSubscriber;
+    } else {
+        prev->next = newSubscriber;
+    }
+    return 0;
 }
 
 int remove_subscriber(KeyNode *keyNode, int fdNotifPipe) {
