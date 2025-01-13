@@ -174,6 +174,7 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
+	fprintf(stdout, "Client was disconnected by the server. \n");
 	if(pthread_join(notificationsThread, NULL)){
 		fprintf(stderr, "Failed to join notification thread\n");
 	}
