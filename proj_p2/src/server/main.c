@@ -371,9 +371,7 @@ int manage_request(struct Client *client, const char opcode,
 				return 1;
 			}
 			printf("Unsubscribe key %s\n", key); // ????
-			// FIXME kvs_unsubscribe would be smarter if found directly from the list of subscriptions
 			kvs_unsubscribe(key, &client);
-			// FIXME remove from the list of subscriptions
 			return 0;
 		}
 		default: {
@@ -390,20 +388,13 @@ void *process_client_thread() {
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
     pthread_sigmask(SIG_BLOCK, &set, NULL);
-	/*
-	sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGUSR1);
 
-	if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
-		perror("Error blocking SIGUSR1");
-		return NULL;
-	}*/
 	while (1) {
+		// Read from procudecr consumer buffer
 		sem_wait(&readSem);
 		pthread_mutex_lock(&clientsBufferMutex);
+
 		struct ClientInfo *newClient = clientsBuffer[out];
-		out++;
 
 		char reqPath[MAX_PIPE_PATH_LENGTH];
 		char respPath[MAX_PIPE_PATH_LENGTH];
@@ -415,16 +406,19 @@ void *process_client_thread() {
 
 		free(newClient);
 
+		out++;
 		if (out == MAX_SESSION_COUNT) out = 0;
+
 		pthread_mutex_unlock(&clientsBufferMutex);
 		sem_post(&writeSem);
 
 		struct Client *client = NULL;
-
-		if(kvs_connect(reqPath, respPath, notifPath, &client) == 1){
+		int status = kvs_connect(reqPath, respPath, notifPath, &client);
+		if(status){
 			fprintf(stderr, "Failed to connect to the server\n");
+			if(status == -1) break; // could not allocate client
 			kvs_disconnect(&client);
-			continue;
+			break;
 		}
 
 		// FIXME ha maneiras melhores de fazer isto
@@ -433,7 +427,7 @@ void *process_client_thread() {
 		int clientStatus = 0;
 		int readingError = 0;
 		char opcode = OP_CODE_CONNECT;
-		int status = 0;
+		status = 0;
 
 		while (clientStatus != CLIENT_TERMINATED) {
 			status = read_all(client->fdReq, &opcode, 1, &readingError);
@@ -504,7 +498,7 @@ void *process_host_thread(void *arg){
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 	pthread_mutex_init(&clientsBufferMutex, NULL);
-	
+
 	// Create threads to deal with clients
 	pthread_t thread[MAX_SESSION_COUNT];
 	for(int i = 0; i < MAX_SESSION_COUNT; i++){

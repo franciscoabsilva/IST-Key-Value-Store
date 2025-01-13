@@ -55,6 +55,12 @@ int kvs_subscribe(const char *key, struct Client **client);
 
 int kvs_unsubscribe(const char *key, struct Client **client);
 
+// Connects to the client.
+/// @param req_pipe Path to the request pipe.
+/// @param resp_pipe Path to the response pipe.
+/// @param notif_pipe Path to the notification pipe.
+/// @param client Pointer to the client struct.
+/// @return 0 if the connection was successful, -1 if the client was not allocated, 1 for other errors.
 int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client);
 
 void kvs_disconnect(struct Client **client);

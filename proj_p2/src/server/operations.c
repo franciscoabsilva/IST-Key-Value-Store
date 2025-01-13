@@ -462,56 +462,51 @@ int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe) {
 
 int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client) {
 
+	int result = 0; // 0 if successful, 1 otherwise
+
 	int fdNotifPipe = open(notif_pipe, O_WRONLY);
 	if (fdNotifPipe < 0) {
 		fprintf(stderr, "Failed to open notifications pipe\n");
-		return 1;
+		result = 1;
 	}
 
 	int fdReqPipe = open(req_pipe, O_RDONLY);
 	if (fdReqPipe < 0) {
 		fprintf(stderr, "Failed to open requests pipe\n");
-		if (close(fdNotifPipe)) {
-			fprintf(stderr, "Failed to close notifications pipe\n");
-		}
-		return 1;
+		result = 1;
 	}
 
 	int fdRespPipe = open(resp_pipe, O_WRONLY);
 	if (fdRespPipe < 0) {
 		fprintf(stderr, "Failed to open responses pipe\n");
-		if (close(fdNotifPipe) || close(fdReqPipe)) {
-			fprintf(stderr, "Failed to notifications and requests pipes\n");
-		}
 		return 1;
 	}
 
-	*client = malloc(sizeof(struct Client));
+	*client = malloc(sizeof(struct Client)); // se deer erro aqui, nao vai dar para dar disconnect fora
 	if (*client == NULL) {
+		if(close(fdReqPipe) < 0 || close(fdRespPipe) < 0 || close(fdNotifPipe) < 0){
+			fprintf(stderr, "Failed to close pipes\n");
+		}
 		fprintf(stderr, "Failed to allocate memory for client\n");
-		if (close(fdNotifPipe) || close(fdReqPipe) || close(fdRespPipe)) {
-			fprintf(stderr, "Failed to close pipes\n");
-		}
-		return 1;
+		result = -1;
 	}
-	(*client)->fdReq = fdReqPipe;
-	(*client)->fdResp = fdRespPipe;
-	(*client)->fdNotif = fdNotifPipe;
-	(*client)->subscriptions = NULL;
+	else {
+		(*client)->fdReq = fdReqPipe;
+		(*client)->fdResp = fdRespPipe;
+		(*client)->fdNotif = fdNotifPipe;
+		(*client)->subscriptions = NULL;
 
-	if (add_client(*client)) {
-		fprintf(stderr, "Failed to add client to list\n");
-		if (close(fdNotifPipe) || close(fdReqPipe) || close(fdRespPipe)) {
-			fprintf(stderr, "Failed to close pipes\n");
+		if (add_client(*client)) {
+			fprintf(stderr, "Failed to add client to list\n");
+			result = 1;
 		}
-		free(*client);
-		return 1;
 	}
 	
-	// ???? apagar
-	write_to_resp_pipe((*client)->fdResp, OP_CODE_CONNECT, '0');
-	fprintf(stdout, "Connected to client: %s\n", req_pipe);
-	return 0;
+	char result_char = result ? '1' : '0';
+
+	write_to_resp_pipe((*client)->fdResp, OP_CODE_CONNECT, result_char);
+	fprintf(stdout, "Connected to client: %s\n", req_pipe); // ???? apagar
+	return result;
 }
 
 void kvs_disconnect(struct Client **client) {
