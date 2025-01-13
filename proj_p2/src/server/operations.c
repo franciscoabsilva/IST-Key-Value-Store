@@ -23,7 +23,7 @@ typedef struct {
 
 
 struct Client *connectedClients[MAX_SESSION_COUNT] = {NULL};
-pthread_mutex_t connectedClientsMutex = PTHREAD_MUTEX_INITIALIZER; // FIXME
+pthread_mutex_t connectedClientsMutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 
@@ -315,7 +315,6 @@ int kvs_subscribe(const char *key, struct Client **client) {
 			subscriptionStatus = add_subscriber(keyNode, (*client)->fdNotif);
 			if (subscriptionStatus == -1) {
 				fprintf(stderr, "Failed to add subscriber\n");
-				//FIXME TODOD ????? result = RESULT_ERROR;
 			}
 			result = RESULT_KEY_EXISTS;
 			break;
@@ -518,9 +517,8 @@ void kvs_disconnect(struct Client **client) {
 		free(current);
 		current = next;
 	}
-	(*client)->subscriptions = NULL; // DAR FREE A ESTAS SUBSCRIPTIONS ????? TODOO
+	(*client)->subscriptions = NULL;
 
-	// FIXME COMO DAR RESPOSTA NO DISCONNECT?
 	char result = '0';
 	if (close((*client)->fdReq) < 0) {
 		fprintf(stderr, "Failed to close requests pipe.\n");
@@ -548,7 +546,6 @@ void kvs_disconnect(struct Client **client) {
 
 int clean_all_clients() {
 	pthread_mutex_lock(&connectedClientsMutex);
-	printf("1");
 	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
 
 		if (connectedClients[i] == NULL) continue;
@@ -561,7 +558,6 @@ int clean_all_clients() {
 			current = next;
 		}
 		connectedClients[i]->subscriptions = NULL;
-		printf("3");
 
 		if (close(connectedClients[i]->fdReq) < 0) {
 			fprintf(stderr, "Failed to close requests pipe.\n");

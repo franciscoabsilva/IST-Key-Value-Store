@@ -36,7 +36,6 @@ void *process_notif_thread(void *arg) {
 	int readError = 0;
 	int status = 0;
 
-	// FIXME ???? as leituras deviam ser feitas as duas de seguida nao?
 	char key[KEY_MESSAGE_SIZE];
 	char value[KEY_MESSAGE_SIZE];
 	while (1) {
@@ -112,8 +111,6 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	// ???? apagar
-	fprintf(stdout, "Connected to server\n");
 	while (!serverDisconnected) {
 		switch (get_next(STDIN_FILENO)) {
 			case CMD_DISCONNECT:
@@ -121,9 +118,6 @@ int main(int argc, char *argv[]) {
 					fprintf(stderr, "Failed to disconnect to the server\n");
 					return 1;
 				}
-				// TODO: end notifications thread
-				//??? apagar
-				printf("Disconnected from server\n");
 				return 0;
 
 			case CMD_SUBSCRIBE:

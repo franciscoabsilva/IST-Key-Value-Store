@@ -55,7 +55,6 @@ void *process_thread(void *arg) {
     sigaddset(&set, SIGUSR1);
     pthread_sigmask(SIG_BLOCK, &set, NULL);
 
-	//FIXME DEAL WITH SIGNALS
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
 	DIR *dir = arg_struct->dir;
 	char *directory_path = arg_struct->directory_path;
@@ -309,15 +308,12 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 
 	strncpy(req_pipe, &buffer[1], MAX_PIPE_PATH_LENGTH);
     req_pipe[MAX_PIPE_PATH_LENGTH] = '\0';
-	printf("Req Pipe %s.\n", req_pipe); // ????clientapi.c
 
     strncpy(resp_pipe, &buffer[1 + MAX_PIPE_PATH_LENGTH], MAX_PIPE_PATH_LENGTH);
     resp_pipe[MAX_PIPE_PATH_LENGTH] = '\0'; 
-	printf("Resp Pipe %s.\n", resp_pipe); // ????
     
     strncpy(notif_pipe, &buffer[1 + MAX_PIPE_PATH_LENGTH * 2], MAX_PIPE_PATH_LENGTH);
-    notif_pipe[MAX_PIPE_PATH_LENGTH] = '\0'; // Null-terminate the string
-	printf("Notif Pipe %s.\n", notif_pipe); // ????
+    notif_pipe[MAX_PIPE_PATH_LENGTH] = '\0';
 	
 	return 0;
 }
@@ -337,13 +333,11 @@ int manage_request(struct Client *client, const char opcode) {
 		}
 
 		case OP_CODE_DISCONNECT: {
-			printf("YUHU KVS DISCONNECT\n"); // ????
 			kvs_disconnect(&client);
 			return 1;
 		}
 
 		case OP_CODE_SUBSCRIBE: {
-			printf("YUHU KVS SUBSCRIBE\n"); // ????
 			char key[KEY_MESSAGE_SIZE];
 			int readingError = 0;
 			if(read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
@@ -351,8 +345,7 @@ int manage_request(struct Client *client, const char opcode) {
 				kvs_disconnect(&client);
 				return 1;
 			}
-			printf("Subscribed key: %s\n", key); // ????
-			if (kvs_subscribe(key, &client)) { // meter == 1 ????? TODO
+			if (kvs_subscribe(key, &client)) {
 				fprintf(stderr, "Failed to subscribe client\n");
 				kvs_disconnect(&client);
 				return 1;
@@ -361,7 +354,6 @@ int manage_request(struct Client *client, const char opcode) {
 		}
 
 		case OP_CODE_UNSUBSCRIBE: {
-			printf("YUHU KVS UNUBSCRIBE\n"); // ????
 			char key[KEY_MESSAGE_SIZE];
 			int readingError = 0;
 			if (read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
@@ -369,7 +361,6 @@ int manage_request(struct Client *client, const char opcode) {
 				kvs_disconnect(&client);
 				return 1;
 			}
-			printf("Unsubscribe key %s\n", key); // ????
 			kvs_unsubscribe(key, &client);
 			return 0;
 		}
@@ -434,25 +425,20 @@ void *process_client_thread() {
 				kvs_disconnect(&client);
 				break;
 			}
-			printf("Opcode:%c\n", opcode); // ???? apagar
 			clientStatus = manage_request(client, opcode);
 		}
-
-		printf("end of client thread\n");
 	}
 	return NULL;
 }
 
 
-void handle_SIGUSR1(){	
-	printf("SIGUSR1 received\n");
+void handle_SIGUSR1(){
 	restartClients = 1;
 	sem_post(&writeSem);
 }
 
 int restart_clients(){
 	clean_all_clients();
-	printf("entered restar clients\n"); //TODO APAGAR
 	restartClients = 0;
 	return 0;
 }
@@ -462,9 +448,6 @@ void *process_host_thread(void *arg){
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
-
-	pid_t pid = getpid();
-	printf("PID: %d\n", pid); // ???? TODO TIRAR
 
 	const char *fifo_path = (const char *) arg;
 
@@ -487,7 +470,6 @@ void *process_host_thread(void *arg){
 		fprintf(stderr, "Failed to open server pipe\n");
 		return NULL;
 	}
-	printf("Server pipe opened.\n");  // ????? TODO apagar
 
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
