@@ -456,9 +456,6 @@ void *process_host_thread(void *arg){
     sigaddset(&set, SIGUSR1);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
-	pid_t pid = getpid();
-	printf("PID: %d\n", pid); // ???? TODO TIRAR
-
 	const char *fifo_path = (const char *) arg;
 
 	in  = 0;
