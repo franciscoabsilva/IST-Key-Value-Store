@@ -455,8 +455,7 @@ void *process_client_thread() {
 }
 
 
-void handle_SIGUSR1(){
-	// FIXME mutex?
+void handle_SIGUSR1(){	
 	printf("SIGUSR1 received\n");
 	restartClients = 1;
 	sem_post(&writeSem);
@@ -464,28 +463,13 @@ void handle_SIGUSR1(){
 
 int restart_clients(){
 	clean_all_clients();
-	printf("heyoa\n"); //TODO APAGAR
+	printf("entered restar clients\n"); //TODO APAGAR
 	restartClients = 0;
 	sem_wait(&writeSem);
 	return 0;
 }
 
 void *process_host_thread(void *arg){
-	// FIXME UNBLOCK O SIGUSR1
-
-	/*
-	if(signal(SIGUSR1, handle_SIGUSR1()) == SIG_ERR){
-		fprintf(stderr, "Failed to set signal handler\n");
-		exit(EXIT_FAILURE); //FIXME: ou isto ou nada ?
-							// return nao faz sentido pq a process thread nunca deve ser terminada
-	}*/
-
-	/*void ignore_sigpipe_in_threads() {
-    sigset_t signal_set;
-    sigemptyset(&signal_set);
-    sigaddset(&signal_set, SIGPIPE);
-    pthread_sigmask(SIG_BLOCK, &signal_set, NULL);
-}*/
 	sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
@@ -498,12 +482,6 @@ void *process_host_thread(void *arg){
 
 	in  = 0;
 	out = 0;
-
-	// TODO, PORQUE METER ISTO AQUI E NAO DPS DOS UNLINKS PARA NAO CRIAR CASO HAJA ERROS ?????
-	sem_init(&readSem, 0, 0);
-	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
-	pthread_mutex_init(&clientsBufferMutex, NULL);
-
 	
 	// Create and open server pipe
 	if (unlink(fifo_path) && errno != ENOENT) {
@@ -523,6 +501,10 @@ void *process_host_thread(void *arg){
 	}
 	printf("Server pipe opened.\n");  // ????? TODO apagar
 
+	sem_init(&readSem, 0, 0);
+	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
+	pthread_mutex_init(&clientsBufferMutex, NULL);
+	
 	// Create threads to deal with clients
 	pthread_t thread[MAX_SESSION_COUNT];
 	for(int i = 0; i < MAX_SESSION_COUNT; i++){
@@ -531,18 +513,20 @@ void *process_host_thread(void *arg){
 		}
 	}
 
+
+	char opCode;
+	char req_pipe[MAX_PIPE_PATH_LENGTH];
+	char resp_pipe[MAX_PIPE_PATH_LENGTH];
+	char notif_pipe[MAX_PIPE_PATH_LENGTH];
+
 	while (1) {
 		sem_wait(&writeSem);
 		
+		// check if SIGUSR1 was sent
 		if(restartClients){
 			restart_clients();
 			continue;
 		} 
-
-		char opCode;
-		char req_pipe[MAX_PIPE_PATH_LENGTH];
-		char resp_pipe[MAX_PIPE_PATH_LENGTH];
-		char notif_pipe[MAX_PIPE_PATH_LENGTH];
 		
 		if (read_connect_message(fdServerPipe, &opCode, req_pipe, resp_pipe, notif_pipe) == 1) {
 			sem_post(&writeSem);
@@ -561,12 +545,10 @@ void *process_host_thread(void *arg){
 
 		// add the new client to producer-consumer buffer
 		clientsBuffer[in] = newClient;
-
 		in++;
 		if (in == MAX_SESSION_COUNT) in = 0;
 		sem_post(&readSem);
 	}
-
 	return NULL;
 }
 
@@ -579,14 +561,6 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGUSR1, &sa, NULL);
-	/* TODO QUERO METER ISTO EM VEZ DA LINHA ACIMA ?????
-	if (sigaction(SIGUSR1, &sa, NULL) < 0) {
-    	perror("sigaction");
-    	exit(EXIT_FAILURE);
-	}
-	*/
-
-	// FIXME SIGMASK O SIGUSR1
 
 	if (argc != 5) {
 		fprintf(stderr, "Usage: %s <dir_jobs> <max_threads> <backups_max> [name_registry_FIFO]\n", argv[0]);
@@ -598,9 +572,6 @@ int main(int argc, char *argv[]) {
 	unsigned int MAX_THREADS = (unsigned int) strtoul(argv[3], NULL, 10);
 	const char *fifo_path = argv[4];
 
-	// TODO: create master thread to deal with the registry FIFO
-	// (open fifo in master thread? hm maybe idk)
-	// is master thread this running main? (probably, ups)
 
 	DIR *dir = opendir(directory_path);
 
@@ -623,7 +594,7 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "Failed to initialize lock\n");
 	}
 
-
+	// create jobs threads
 	pthread_t thread[MAX_THREADS];
 	struct ThreadArgs args = {dir, directory_path, &backupCounter};
 	for (unsigned int i = 0; i < MAX_THREADS; i++) {
@@ -643,7 +614,7 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "Failed to join job thread\n");
 		}
 	}
-
+	
 	if (pthread_join(host_thread, NULL)) {
 		fprintf(stderr, "Failed to join host thread\n");
 	}
