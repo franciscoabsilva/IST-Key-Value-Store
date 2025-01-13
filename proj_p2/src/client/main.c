@@ -105,14 +105,7 @@ int main(int argc, char *argv[]) {
 
 	// ???? apagar
 	fprintf(stdout, "Connected to server\n");
-	while (1) {
-		if(serverDisconnected){
-			if(pthread_join(notificationsThread, NULL)){
-				fprintf(stderr, "Failed to join notification thread\n");
-			}
-			return 0;
-		}
-
+	while (!serverDisconnected) {
 		switch (get_next(STDIN_FILENO)) {
 			case CMD_DISCONNECT:
 				if (kvs_disconnect(fdRequestPipe, req_pipe_path, fdResponsePipe, resp_pipe_path,
@@ -178,4 +171,8 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
+	if(pthread_join(notificationsThread, NULL)){
+		fprintf(stderr, "Failed to join notification thread\n");
+	}
+	return 0;
 }

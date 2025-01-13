@@ -460,6 +460,7 @@ void handle_SIGUSR1(){
 
 void clean_client_buffer() {
     pthread_rwlock_wrlock(&globalHashLock);
+	// TODO ISTO NAO FAZ SENTIDO NENHUM ????
     for (int i = 0; i < MAX_SESSION_COUNT; i++) clientsBuffer[i] = NULL;
     pthread_rwlock_unlock(&globalHashLock);
 	printf("All clients disconnected\n");
@@ -470,10 +471,12 @@ int restart_clients(){
 	in = 0;
 	out = 0;
 	sem_destroy(&readSem);
-	sem_destroy(&writeSem);
+	sem_destroy(&writeSem);	
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
+	printf("10");
 	clean_all_clients();	
+	printf("heyo\n");
 	clean_client_buffer();
 	restartClients = 0;
 	return 0;

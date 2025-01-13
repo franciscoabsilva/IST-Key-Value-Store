@@ -514,7 +514,7 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 	return 0;
 }
 
-int kvs_disconnect(struct Client **client) {
+void kvs_disconnect(struct Client **client) {
 
 	// Unsubscribe all keys
 	SubscriptionsKeyNode *current = (*client)->subscriptions;
@@ -541,7 +541,7 @@ int kvs_disconnect(struct Client **client) {
 		result = '1';
 	}
 
-	if(write_to_resp_pipe((*client)->fdResp, OP_CODE_DISCONNECT, result) == 1){
+	if(write_to_resp_pipe((*client)->fdResp, OP_CODE_DISCONNECT, result) == 1) {
 		fprintf(stderr, "Failed to write disconnect response to responses pipe\n");
 	}
 
@@ -551,23 +551,43 @@ int kvs_disconnect(struct Client **client) {
 
 	if (remove_client((*client)->fdReq, (*client)->fdResp, (*client)->fdNotif)) {
 		fprintf(stderr, "Failed to remove client from the list\n");
-		return 1;
 	}
-
-	return 0;
 }
 
 
 int clean_all_clients() {
 	pthread_mutex_lock(&connectedClientsMutex);
+	printf("1");
 	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-		if (connectedClients[i] != NULL) {
-			if (kvs_disconnect(&connectedClients[i]) == 1) {
-				fprintf(stderr, "Failed to disconnect client\n");
+
+		if (connectedClients[i] == NULL) continue;
+		SubscriptionsKeyNode *current = connectedClients[i]->subscriptions;
+		while (current != NULL) {
+			if (kvs_aux_unsubscribe(current->key, &connectedClients[i]) == 1) {
+				fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
 			}
-			free(connectedClients[i]);
-			connectedClients[i] = NULL;
+			SubscriptionsKeyNode *next = current->next;
+			free(current->key);
+			free(current);
+			current = next;
 		}
+		connectedClients[i]->subscriptions = NULL;
+		printf("3");
+
+		if (close(connectedClients[i]->fdReq) < 0) {
+			fprintf(stderr, "Failed to close requests pipe.\n");
+		}
+
+		if (close(connectedClients[i]->fdNotif) < 0) {
+			fprintf(stderr, "Failed to close notifications pipe.\n");
+		}
+
+		if (close(connectedClients[i]->fdResp) < 0) {
+			fprintf(stderr, "Failed to close responses pipe.\n");
+		}
+
+		free(connectedClients[i]);
+		connectedClients[i] = NULL;
 	}
 	pthread_mutex_unlock(&connectedClientsMutex);
 	return 0;

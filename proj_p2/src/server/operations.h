@@ -57,7 +57,7 @@ int kvs_unsubscribe(const char *key, struct Client **client);
 
 int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client);
 
-int kvs_disconnect(struct Client **client);
+void kvs_disconnect(struct Client **client);
 
 int clean_all_clients();
 
