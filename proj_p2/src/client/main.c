@@ -170,8 +170,6 @@ int main(int argc, char *argv[]) {
 				break;
 
 			case EOC:
-				// input should end in a disconnect, or it will loop here forever
-				// FIXME esta tarefa é que termina a fifo de notificações!
 				if(kvs_disconnect(fdRequestPipe, fdResponsePipe, notificationsThread)) {
 					fprintf(stderr, "Failed to disconnect from server.\n");
 				}

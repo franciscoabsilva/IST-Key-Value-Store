@@ -65,12 +65,7 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
 		fprintf(stderr, "Error: Allocating key node.\n");
 		return 1;
 	}
-	keyNode->subscriber = malloc(sizeof(Subscriber));
-	if (!keyNode->subscriber) {
-		fprintf(stderr, "Error: Allocating subscriber.\n");
-		free(keyNode);
-		return 1;
-	}
+
 	keyNode->subscriber = NULL;
 	keyNode->key = strdup(key);     // Allocate memory for the key
 	keyNode->value = strdup(value); // Allocate memory for the value
@@ -78,7 +73,6 @@ int write_pair(HashTable *ht, const char *key, const char *value) {
 		fprintf(stderr, "Error: Allocating key or value.\n");
 		free(keyNode->key);
 		free(keyNode->value);
-		free_subscribers(keyNode->subscriber);
 		free(keyNode);
 		return 1;
 	}
