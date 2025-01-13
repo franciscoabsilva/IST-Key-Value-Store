@@ -322,12 +322,8 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 /// @param fdReqPipe 
 /// @param fdRespPipe 
 /// @param opcode 
-/// @param subscribedKeys 
-/// @param subKeyCount 
 /// @return 1 if CONNECT, SUBSCRIBE, UNSUBSCRIBE, 0 if DISCONNECT, -1 unknown opcode
-int manage_request(struct Client *client, const char opcode,
-				   char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE],
-				   int *subKeyCount) {
+int manage_request(struct Client *client, const char opcode) {
 
 	switch (opcode) {
 		case OP_CODE_CONNECT: {
@@ -356,8 +352,6 @@ int manage_request(struct Client *client, const char opcode,
 				kvs_disconnect(&client);
 				return 1;
 			}
-			strcpy(subscribedKeys[*subKeyCount], key); // Copy the key into the subscriptions list
-			(*subKeyCount)++;
 			return 0;
 		}
 
@@ -421,9 +415,6 @@ void *process_client_thread() {
 			break;
 		}
 
-		// FIXME ha maneiras melhores de fazer isto
-		char subscribedKeys[MAX_NUMBER_SUB][MAX_STRING_SIZE];
-		int countSubscribedKeys = 0;
 		int clientStatus = 0;
 		int readingError = 0;
 		char opcode = OP_CODE_CONNECT;
@@ -439,8 +430,7 @@ void *process_client_thread() {
 				break;
 			}
 			printf("Opcode:%c\n", opcode); // ???? apagar
-			clientStatus = manage_request(client, opcode, subscribedKeys,
-										 &countSubscribedKeys);
+			clientStatus = manage_request(client, opcode);
 		}
 
 		printf("end of hostthread\n");
