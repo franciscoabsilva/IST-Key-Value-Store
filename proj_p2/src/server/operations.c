@@ -504,7 +504,6 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 	char result_char = result ? '1' : '0';
 
 	write_to_resp_pipe((*client)->fdResp, OP_CODE_CONNECT, result_char);
-	fprintf(stdout, "Connected to client: %s\n", req_pipe); // ???? apagar
 	return result;
 }
 

@@ -50,6 +50,11 @@ int in, out;
 int restartClients = 0;
 
 void *process_thread(void *arg) {
+	sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGUSR1);
+    pthread_sigmask(SIG_BLOCK, &set, NULL);
+
 	//FIXME DEAL WITH SIGNALS
 	struct ThreadArgs *arg_struct = (struct ThreadArgs *) arg;
 	DIR *dir = arg_struct->dir;

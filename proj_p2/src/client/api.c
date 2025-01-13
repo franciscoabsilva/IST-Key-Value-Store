@@ -151,7 +151,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	if(close(*fdServerPipe) < 0) {
 		fprintf(stderr, "Client could not close server pipe.\n");
 	}
-	// FIX ME, DISCONNECT IF OPEN RETURNED 1
 
 	*fdNotificationPipe = open(notif_pipe_path, O_RDONLY);
 	if (*fdNotificationPipe < 0) {
@@ -179,7 +178,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	
 
 	// read response from server
-	// FIX ME disconnect in case of an error
 	const char expected_OP_Code = OP_CODE_CONNECT;
 	char result;
 	if (read_server_response(*fdResponsePipe, expected_OP_Code, &result) == 1) {
@@ -192,7 +190,6 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
 				   int fdNotification, const char *notif_pipe_path) {
-	printf("fui\n");
 	if(close(fdRequestPipe)  < 0){
 		fprintf(stderr, "Client failed to close requests pipe.\n");
 	}
