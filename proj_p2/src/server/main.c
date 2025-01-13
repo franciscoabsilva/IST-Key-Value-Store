@@ -438,7 +438,7 @@ void *process_client_thread() {
 			clientStatus = manage_request(client, opcode);
 		}
 
-		printf("end of hostthread\n");
+		printf("end of client thread\n");
 	}
 	return NULL;
 }
