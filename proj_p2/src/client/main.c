@@ -44,6 +44,7 @@ void *process_notif_thread(void *arg) {
 			serverDisconnected = 1;
 			terminate_pipes(*fdRequestPipe, req_pipe_path, *fdResponsePipe,
 							 resp_pipe_path, *fdNotificationPipe, notif_pipe_path);
+			pthread_exit(NULL);
 		}
 		if (status == -1 || readError == 1) {
 			fprintf(stderr, "Failed to read key from notifications pipe.\n");
@@ -54,6 +55,7 @@ void *process_notif_thread(void *arg) {
 			serverDisconnected = 1;
 			terminate_pipes(*fdRequestPipe, req_pipe_path, *fdResponsePipe,
 							 resp_pipe_path, *fdNotificationPipe, notif_pipe_path);
+			pthread_exit(NULL);
 		}
 		if (status == -1 || readError == 1) {
 			fprintf(stderr, "Failed to read key from notifications pipe.\n");
