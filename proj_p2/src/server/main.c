@@ -41,7 +41,8 @@ struct ClientInfo {
 	char notifFifo[MAX_PIPE_PATH_LENGTH];
 };
 
-struct ClientInfo *clientsBuffer[MAX_SESSION_COUNT];
+
+struct ClientInfo *clientsBuffer[MAX_SESSION_COUNT]; //producer-consumer buffer
 sem_t readSem;
 sem_t writeSem;
 
@@ -52,6 +53,7 @@ static int disconnectControl = 0;
 static int restartClients = 0;
 
 void *process_thread(void *arg) {
+	// mask SIGUSR1 signal
 	sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
@@ -294,6 +296,13 @@ void *process_thread(void *arg) {
 	return NULL;
 }
 
+/// @brief Reads the connect message from the server pipe
+/// @param fdServerPipe 
+/// @param opcode 
+/// @param req_pipe 
+/// @param resp_pipe 
+/// @param notif_pipe 
+/// @return 0 on success, 1 on error
 int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe) {
 	int reading_error = 0;
 	char buffer[MAX_PIPE_PATH_LENGTH*3 + 1];
@@ -320,10 +329,8 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 	return 0;
 }
 
-/// @brief 
-/// @param fdNotifPipe 
-/// @param fdReqPipe 
-/// @param fdRespPipe 
+/// @brief Given an opcode, executes the request from the client
+/// @param client
 /// @param opcode 
 /// @return 1 if CONNECT, SUBSCRIBE, UNSUBSCRIBE, 0 if DISCONNECT, -1 unknown opcode
 int manage_request(struct Client *client, const char opcode) {
@@ -344,13 +351,13 @@ int manage_request(struct Client *client, const char opcode) {
 			int readingError = 0;
 			if(read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0){
 				fprintf(stderr, "Failed to read key from requests pipe.\n");
-				if (disconnectControl) return 1;
+				if (disconnectControl) return 1; // if SIGUSR1 was sent
 				kvs_disconnect(&client);
 				return 1;
 			}
 			if (kvs_subscribe(key, &client)) {
 				fprintf(stderr, "Failed to subscribe client\n");
-				if (disconnectControl) return 1;
+				if (disconnectControl) return 1; // if SIGUSR1 was sent
 				kvs_disconnect(&client);
 				return 1;
 			}
@@ -362,7 +369,7 @@ int manage_request(struct Client *client, const char opcode) {
 			int readingError = 0;
 			if (read_all(client->fdReq, key, KEY_MESSAGE_SIZE, &readingError) <= 0) {
 				fprintf(stderr, "Failed to read key from requests pipe. Client was disconnected.\n");
-				if (disconnectControl) return 1;
+				if (disconnectControl) return 1; // if SIGUSR1 was sent
 				kvs_disconnect(&client);
 				return 1;
 			}
@@ -371,7 +378,7 @@ int manage_request(struct Client *client, const char opcode) {
 		}
 		default: {
 			fprintf(stderr, "Unrecognized OP Code: %c. Client was disconnected.\n", opcode);
-			if (disconnectControl) return 1;
+			if (disconnectControl) return 1; // if SIGUSR1 was sent
 			kvs_disconnect(&client);
 			return 1;
 		}
@@ -380,6 +387,7 @@ int manage_request(struct Client *client, const char opcode) {
 
 
 void *process_client_thread() {
+	// mask SIGUSR1 signal
 	sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
@@ -387,6 +395,7 @@ void *process_client_thread() {
 
 	while (1) {
 		// Read from producer consumer buffer
+		// CRITICAL SECTION FOR READING CLIENTS BUFFER
 		sem_wait(&readSem);
 		pthread_mutex_lock(&clientsBufferMutex);
 
@@ -407,10 +416,11 @@ void *process_client_thread() {
 
 		pthread_mutex_unlock(&clientsBufferMutex);
 		sem_post(&writeSem);
+		// END OF CRITICAL SECTION FOR READING CLIENTS BUFFER
 
 		struct Client *client = NULL;
 		int status = kvs_connect(reqPath, respPath, notifPath, &client);
-		if(status){
+		if(status){ 
 			fprintf(stderr, "Failed to connect to the server\n");
 			if(status == -1) continue; // could not allocate client
 			kvs_disconnect(&client);
@@ -424,7 +434,7 @@ void *process_client_thread() {
 
 		while (clientStatus != CLIENT_TERMINATED) {
 			status = read_all(client->fdReq, &opcode, 1, &readingError);
-			if (disconnectControl) break;
+			if (disconnectControl) break; // if SIGUSR1 was sent
 			if (status != 1) {
 				if(status == -1 || readingError){
 					fprintf(stderr, "Failed to read OP Code from requests pipe.\n");
@@ -438,12 +448,14 @@ void *process_client_thread() {
 	return NULL;
 }
 
+/// @brief async signal safe function to handle SIGUSR1
 void handle_SIGUSR1(){
 	disconnectControl = 1;
 	restartClients = 1;
 	sem_post(&writeSem);
 }
 
+/// @brief restarts all clients and reets the restartClients flag
 int restart_clients(){
 	clean_all_clients();
 	restartClients = 0;
@@ -451,6 +463,7 @@ int restart_clients(){
 }
 
 void *process_host_thread(void *arg){
+	// set handel for SIGUSR1 signal
 	sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
@@ -458,9 +471,6 @@ void *process_host_thread(void *arg){
 
 	const char *fifo_path = (const char *) arg;
 
-	in  = 0;
-	out = 0;
-	
 	// Create and open server pipe
 	if (unlink(fifo_path) && errno != ENOENT) {
 		fprintf(stderr, "Failed to unlink server pipe\n");
@@ -472,6 +482,9 @@ void *process_host_thread(void *arg){
 		return NULL;
 	}
 
+	in  = 0;
+	out = 0;
+	
 	sem_init(&readSem, 0, 0);
 	sem_init(&writeSem, 0, MAX_SESSION_COUNT);
 	pthread_mutex_init(&clientsBufferMutex, NULL);
@@ -479,10 +492,13 @@ void *process_host_thread(void *arg){
 	int fdServerPipe = open(fifo_path, O_RDONLY);
 	if (fdServerPipe < 0) {
 		fprintf(stderr, "Failed to open server pipe\n");
+
 		if (pthread_mutex_destroy(&clientsBufferMutex)) 
 			fprintf(stderr, "Failed to destroy clientsBufferMutex\n");
+
 		if (sem_destroy(&readSem) == -1 || sem_destroy(&writeSem)) 
 			fprintf(stderr, "Failed to destroy semaphores\n");
+
 		return NULL;
 	}
 
@@ -500,6 +516,7 @@ void *process_host_thread(void *arg){
 	char notif_pipe[MAX_PIPE_PATH_LENGTH];
 
 	while (1) {
+		// read from producer-consumer clients buffer
 		sem_wait(&writeSem);
 		
 		// check if SIGUSR1 was sent
@@ -511,7 +528,7 @@ void *process_host_thread(void *arg){
 			sem_post(&writeSem);
 			continue;
 		}
-		disconnectControl = 0;
+		disconnectControl = 0; // reset disconnect control flag
 
 		struct ClientInfo *newClient = malloc(sizeof(struct ClientInfo));
 		if(newClient == NULL){
@@ -519,6 +536,7 @@ void *process_host_thread(void *arg){
 			sem_post(&writeSem);
 			continue;
 		}
+
 		strcpy(newClient->respFifo, resp_pipe);
 		strcpy(newClient->reqFifo, req_pipe);
 		strcpy(newClient->notifFifo, notif_pipe);
@@ -533,9 +551,10 @@ void *process_host_thread(void *arg){
 }
 
 int main(int argc, char *argv[]) {	
+	// ignore SIGPIPE signal
 	signal(SIGPIPE, SIG_IGN);
 
-    // Configurar o tratador de SIGUSR1
+    // mask SIGUSR1 signal
     struct sigaction sa;
     sa.sa_handler = handle_SIGUSR1;
     sa.sa_flags = 0;

@@ -13,7 +13,7 @@
 #include "src/common/constants.h"
 #include "src/common/io.h"
 
-int serverDisconnected = 0;
+int serverDisconnected = 0; // flag to indicate if the server disconnected
 
 struct thread_args {
 	int fdNotificationPipe;
@@ -23,6 +23,7 @@ struct thread_args {
 	const char *resp_pipe_path;
 	const char *notif_pipe_path;
 };
+
 
 void *process_notif_thread(void *arg) {
 	struct thread_args *args = (struct thread_args *) arg;
@@ -39,6 +40,7 @@ void *process_notif_thread(void *arg) {
 	char key[KEY_MESSAGE_SIZE];
 	char value[KEY_MESSAGE_SIZE];
 	while (1) {
+		// read key from notifications pipe
 		status = read_all(*fdNotificationPipe, key, KEY_MESSAGE_SIZE, &readError);
 		if (status == PIPES_CLOSED) {
 			serverDisconnected = 1;
@@ -50,6 +52,7 @@ void *process_notif_thread(void *arg) {
 			fprintf(stderr, "Failed to read key from notifications pipe.\n");
 		}
 
+		// read value from notifications pipe
 		status = read_all(*fdNotificationPipe, value, KEY_MESSAGE_SIZE, &readError);
 		if (status == PIPES_CLOSED) {
 			serverDisconnected = 1;
@@ -60,6 +63,8 @@ void *process_notif_thread(void *arg) {
 		if (status == -1 || readError == 1) {
 			fprintf(stderr, "Failed to read key from notifications pipe.\n");
 		}
+
+		// print key and value
 		fprintf(stdout, "(%s,%s)\n", key, value);
 	}
 }
@@ -103,6 +108,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	// create thread to process notifications
 	struct thread_args args = {fdNotificationPipe, fdRequestPipe, fdResponsePipe,
 							   req_pipe_path, resp_pipe_path, notif_pipe_path};
 	pthread_t notificationsThread;
@@ -126,6 +132,7 @@ int main(int argc, char *argv[]) {
 					fprintf(stderr, "Invalid command. See HELP for usage\n");
 					continue;
 				}
+				
 				if (!kvs_subscribe(fdRequestPipe, fdResponsePipe, keys[0])) {
 					fprintf(stderr, "Command subscribe failed\n");
 				}

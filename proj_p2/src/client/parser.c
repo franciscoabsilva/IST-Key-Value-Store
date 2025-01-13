@@ -192,6 +192,11 @@ int parse_delay(int fd, unsigned int *delay) {
 	return 0;
 }
 
+/// @brief fills a buffer with the contents of a string,
+/// and fills the rest with nulls
+/// @param dest destination buffer
+/// @param src message to be copied
+/// @param size size of the destination buffer
 void fill_with_nulls(char *dest, const char *src, size_t size) {
 	size_t len = strlen(src);
 	if (len > size) len = size;

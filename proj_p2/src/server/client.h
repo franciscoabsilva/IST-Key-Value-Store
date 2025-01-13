@@ -9,12 +9,6 @@ typedef struct SubscriptionsKeyNode {
 struct Client {
     int fdReq, fdResp, fdNotif;
     SubscriptionsKeyNode *subscriptions;
-	//struct ClientNode *next;
 };
-
-typedef struct ClientList {
-	struct ClientNode *head;
-	int size;
-} ClientList;
 
 #endif

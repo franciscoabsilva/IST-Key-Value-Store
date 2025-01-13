@@ -111,21 +111,18 @@ int delete_pair(HashTable *ht, const char *key) {
 			notify_subscribers(keyNode, key, "DELETE");
 			// Delete this node
 			if (prevNode == NULL) {
-				// Node to delete is the first node in the list
-				ht->table[index] = keyNode->next; // Update the table to point to the next node
+				ht->table[index] = keyNode->next; 
 			} else {
-				// Node to delete is not the first; bypass it
-				prevNode->next = keyNode->next; // Link the previous node to the next node
+				prevNode->next = keyNode->next; 
 			}
-			// Free the memory allocated for the key and value
 			free(keyNode->key);
 			free(keyNode->value);
 			free_subscribers(keyNode->subscriber);
-			free(keyNode); // Free the key node itself
-			return 0; // Exit the function
+			free(keyNode); 
+			return 0; 
 		}
-		prevNode = keyNode; // Move prevNode to current node
-		keyNode = keyNode->next; // Move to the next node
+		prevNode = keyNode; 
+		keyNode = keyNode->next; 
 	}
 	return 1;
 }
@@ -139,7 +136,7 @@ int add_subscriber(KeyNode *keyNode, int fdNotifPipe) {
     Subscriber *current = keyNode->subscriber;
     Subscriber *prev = NULL;
 
-    // Traverse the list to check if the subscriber already exists
+    // Check if the subscriber is already on the list
     while (current != NULL) {
         if (current->fdNotifPipe == fdNotifPipe) {
             return 1; // Subscriber already exists
@@ -159,7 +156,6 @@ int add_subscriber(KeyNode *keyNode, int fdNotifPipe) {
 
     // Add the new subscriber to the end of the list
     if (prev == NULL) {
-        // The list was empty
         keyNode->subscriber = newSubscriber;
     } else {
         prev->next = newSubscriber;
@@ -174,10 +170,8 @@ int remove_subscriber(KeyNode *keyNode, int fdNotifPipe) {
     while (subscriber != NULL) {
         if (subscriber->fdNotifPipe == fdNotifPipe) {
             if (prev == NULL) {
-                // Removing the first subscriber
                 keyNode->subscriber = subscriber->next;
             } else {
-                // Removing a subscriber in the middle or end
                 prev->next = subscriber->next;
             }
             free(subscriber);

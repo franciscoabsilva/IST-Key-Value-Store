@@ -26,7 +26,6 @@ struct Client *connectedClients[MAX_SESSION_COUNT] = {NULL};
 pthread_mutex_t connectedClientsMutex = PTHREAD_MUTEX_INITIALIZER;
 
 
-
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
 /// @return Timespec with the given delay.
@@ -326,7 +325,7 @@ int kvs_subscribe(const char *key, struct Client **client) {
 		fprintf(stderr, "Failed to unlock key %d\n", index);
 	}
 
-	if (subscriptionStatus == 0) {
+	if (subscriptionStatus == 0) { // if client wasnt subscribed already
 		SubscriptionsKeyNode *newSub = malloc(sizeof(SubscriptionsKeyNode));
 		if (newSub == NULL) {
 			fprintf(stderr, "Failed to allocate memory for new subscription\n");
@@ -385,18 +384,16 @@ void client_remove_subscription(const char *key, struct Client **client) {
     
     while (current != NULL) {
         if (strcmp(current->key, key) == 0) {
-            // Remove the current node
             if (prev == NULL) {
                 (*client)->subscriptions = current->next;
             } else {
                 prev->next = current->next;
             }
-            SubscriptionsKeyNode *to_free = current; // Save current node for freeing
-            current = current->next; // Advance to the next node
+            SubscriptionsKeyNode *to_free = current; 
+            current = current->next; 
             free(to_free->key);
             free(to_free);
         } else {
-            // Advance both prev and current only when no deletion occurs
             prev = current;
             current = current->next;
         }
@@ -480,7 +477,7 @@ int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client
 		return 1;
 	}
 
-	*client = malloc(sizeof(struct Client)); // se deer erro aqui, nao vai dar para dar disconnect fora
+	*client = malloc(sizeof(struct Client)); // if an error occurs here, no disconnect is needed
 	if (*client == NULL) {
 		if(close(fdReqPipe) < 0 || close(fdRespPipe) < 0 || close(fdNotifPipe) < 0){
 			fprintf(stderr, "Failed to close pipes\n");
@@ -577,34 +574,3 @@ int clean_all_clients() {
 	pthread_mutex_unlock(&connectedClientsMutex);
 	return 0;
 }
-
-/*
-int clean_subscriptions(struct Client **client){
-	SubscriptionsKeyNode *current = (*client)->subscriptions;
-	while (current != NULL) {
-		if (kvs_aux_unsubscribe(current->key, client) == 1) {
-			fprintf(stderr, "Failed to unsubscribe key %s\n", current->key);
-		}
-		SubscriptionsKeyNode *next = current->next;
-		free(current->key);
-		free(current);
-		current = next;
-	}
-	(*client)->subscriptions = NULL;
-	return 0;
-}
-
-int remove_all_subscriptions() {
-	pthread_mutex_lock(&connectedClientsMutex);
-	for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-		if (connectedClients[i] != NULL) {
-			if(connectedClients[i]->subscriptions != NULL){
-				clean_subscriptions(&connectedClients[i]);
-			}
-			free(connectedClients[i]);
-			connectedClients[i] = NULL;
-		}
-	}
-	pthread_mutex_unlock(&connectedClientsMutex);
-	return 0;
-}*/

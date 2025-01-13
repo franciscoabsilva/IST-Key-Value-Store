@@ -48,11 +48,41 @@ int kvs_backup(int fdBck);
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
 
-
-int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe);
-
+/// @brief subscribes a client to a key
+/// @param key 
+/// @param client 
+/// @return 1 if the client was successfully subscribed, 0 if the key did't exit
+/// -1 if an error occurred
 int kvs_subscribe(const char *key, struct Client **client);
 
+/// @brief removes a client from the connectedClients list
+/// @param fdReqPipe 
+/// @param fdRespPipe 
+/// @param fdNotifPipe 
+/// @return 0 if the client was removed successfully, 1 otherwise.
+int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe);
+
+/// @brief subscribes a client to a key
+/// @param key 
+/// @param client 
+/// @return 0 success, -1 otherwise
+int kvs_subscribe(const char *key, struct Client **client);
+
+/// @brief unsubscribes a client from a key
+/// @param key 
+/// @param client 
+/// @return 0 if deletec successfully, 1 subscription not found
+int kvs_aux_unsubscribe(const char *key, struct Client **client) ;
+
+/// @brief removes a subscription from the subscription list of a client    
+/// @param key 
+/// @param client 
+void client_remove_subscription(const char *key, struct Client **client);
+
+/// @brief unsubscribes a client from a key
+/// @param key 
+/// @param client 
+/// @return 0 if the client was successfully unsubscribed, 1 otherwise.
 int kvs_unsubscribe(const char *key, struct Client **client);
 
 // Connects to the client.
@@ -63,8 +93,32 @@ int kvs_unsubscribe(const char *key, struct Client **client);
 /// @return 0 if the connection was successful, -1 if the client was not allocated, 1 for other errors.
 int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client);
 
+/// @brief adds a client to the connectedClients list
+/// @param client 
+/// @return 0 success, 1 otherwise
+int add_client(struct Client *client);
+
+/// @brief removes a client from the connectedClients list
+/// @param fdReqPipe 
+/// @param fdRespPipe 
+/// @param fdNotifPipe 
+/// @return 0 success, 1 otherwise
+int remove_client(int fdReqPipe, int fdRespPipe, int fdNotifPipe);
+
+/// @brief 
+/// @param req_pipe 
+/// @param resp_pipe 
+/// @param notif_pipe 
+/// @param client 
+/// @return 0 success, -1 error happen pipes closed, 1 error happen and disconnect still needed
+int kvs_connect(char *req_pipe, char *resp_pipe, char *notif_pipe, struct Client **client);
+
+/// @brief disconnects a client from the server
+/// @param client 
 void kvs_disconnect(struct Client **client);
 
+/// @brief called after a SIGUSR1 signal is received. Disconnects all clients
+/// @return 0
 int clean_all_clients();
 
 #endif  // KVS_OPERATIONS_H

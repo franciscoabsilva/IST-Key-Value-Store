@@ -187,6 +187,13 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
 	return 0;
 }
 
+/// @brief Closes and unlinks the client pipes.
+/// @param fdRequestPipe 
+/// @param req_pipe_path 
+/// @param fdResponsePipe 
+/// @param resp_pipe_path 
+/// @param fdNotification 
+/// @param notif_pipe_path 
 void terminate_pipes(int fdRequestPipe, const char *req_pipe_path,
 				   int fdResponsePipe, const char *resp_pipe_path,
 				   int fdNotification, const char *notif_pipe_path) {
@@ -256,7 +263,6 @@ int kvs_subscribe(int fdRequestPipe, int fdResponsePipe, const char *key) {
 		return 0;
 	}
 
-	// should read from response pipe
 	char result;
 
 	if (read_server_response(fdResponsePipe, OP_CODE_SUBSCRIBE, &result) == 1) {
@@ -266,7 +272,7 @@ int kvs_subscribe(int fdRequestPipe, int fdResponsePipe, const char *key) {
 }
 
 int kvs_unsubscribe(int fdResquestPipe, int fdResponsePipe, const char *key) {
-	// send unsubscribe message to request pipe and wait for response in response pipe
+	// send unsubscribe message to request pipe 
 	const char opcode = OP_CODE_UNSUBSCRIBE;
 	if (write_all(fdResquestPipe, &opcode, 1) == -1) {
 		fprintf(stderr, "Error writing unsubscribe OP Code on requests pipe\n");

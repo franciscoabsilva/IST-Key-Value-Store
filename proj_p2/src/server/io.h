@@ -29,11 +29,11 @@ size_t strn_memcpy(char *dest, const char *src, size_t n);
 /// @return 0 on success, 1 on error
 int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *resp_pipe, char *notif_pipe);
 
-/// @brief Write a response message to the client	
-/// @param fdRespPipe File descriptor of the response pipe
-/// @param opcode The operation code
-/// @param result The result of the operation
-/// @return 0 on success, 1 on error
+/// @brief Writes the opcode and the result to the response pipe.
+/// @param fdRespPipe fd of the response pipe.
+/// @param opcode 
+/// @param result 
+/// @return 0 if the operation was successful, 1 otherwise.
 int write_to_resp_pipe (int fdRespPipe, const char opcode, const char result);
 
 #endif  // KVS_IO_H

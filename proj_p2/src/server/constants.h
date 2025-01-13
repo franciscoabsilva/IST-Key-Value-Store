@@ -2,7 +2,4 @@
 #define MAX_STRING_SIZE 40
 #define MAX_JOB_FILE_NAME_SIZE 256
 
-#define SUCCESS 0
-#define ERROR 1
-
 #define CLIENT_TERMINATED 1
