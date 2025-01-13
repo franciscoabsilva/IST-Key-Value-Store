@@ -313,7 +313,7 @@ int read_connect_message(int fdServerPipe, char *opcode, char *req_pipe, char *r
 	}
 	
 	*opcode = buffer[0];
-    opcode[1] = '\0'; 
+    opcode[1] = '\0';
 	
     if (*opcode != OP_CODE_CONNECT) return 1;
 
