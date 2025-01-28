@@ -18,6 +18,7 @@ The **IST-KVS (Key Value Store)** is a distributed system for storing and managi
 - Clients interact with the server through communication pipes.
 - Supports multiple simultaneous client connections.
 - Implements graceful disconnection of clients.
+- Implements a Subscription server for KVS Table changes.
 
 ### 3. **Command Processing**
 
@@ -53,12 +54,12 @@ The **IST-KVS (Key Value Store)** is a distributed system for storing and managi
 
 ### Client-Server Communication
 
-Clients establish communication with the server using two named pipes:
+Clients connect to the server using the server pipe and establish communication with the server using two named pipes:
 
 1. **Request Pipe**: Used by the client to send commands to the server.
 2. **Response Pipe**: Used by the server to send responses back to the client.
 
-Each client creates its unique communication pipes, ensuring isolation and concurrency. Upon connecting, the client sends a subscription request to the server, registering its response pipe. The server keeps track of all active client connections in a hash table.
+Each client creates its unique communication pipes, ensuring isolation and concurrency. Upon connecting, the client sends a connection request to the server, registering its response pipe. The server keeps track of all active client connections.
 
 ### Command Handling
 
@@ -171,17 +172,18 @@ This signal handling allows the server to shut down or reset without leaving dan
 2. Run the server:
 
    ```bash
-   ./ist-kvs-server <max-backups> 
+   ./ist-kvs-server <jobs> <max-backups> <max-threads> <server-pipe> 
    ```
-
+   - `<jobs>`: Path to the .job files.
    - `<max-backups>`: Maximum concurrent backups.
-
+   - `<max-threads>`: Maximum concurrent threads.
+   - `<server-pipe>`: Path to the communication pipe for sending commands to the server.
 3. Run a client:
 
    ```bash
-   ./ist-kvs-client <server-pipe>
+   ./ist-kvs-client <id> <server-pipe>
    ```
-
+   - `<id>`: Client's unique identifier
    - `<server-pipe>`: Path to the communication pipe for sending commands to the server.
 
 4. Clean build files:
