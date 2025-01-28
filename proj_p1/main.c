@@ -24,6 +24,7 @@ struct ThreadArgs {
   unsigned int *backupCounter;
 };
 
+
 void *process_thread(void *arg) {
   struct ThreadArgs *arg_struct = (struct ThreadArgs *)arg;
   DIR *dir = arg_struct->dir;

@@ -83,7 +83,9 @@ char *read_pair(HashTable *ht, const char *key) {
 
   while (keyNode != NULL) {
     if (strcmp(keyNode->key, key) == 0) {
-      value = strdup(keyNode->value);
+      char value;
+      asprintf(&value, "%s %d", keyNode->value, keyNode->count);
+      keyNode->count++;
       return value; // Return copy of the value if found
     }
     keyNode = keyNode->next; // Move to the next node

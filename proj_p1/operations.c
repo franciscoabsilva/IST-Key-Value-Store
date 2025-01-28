@@ -11,6 +11,7 @@ static struct HashTable *kvs_table = NULL;
 typedef struct {
   char key[MAX_STRING_SIZE];
   char value[MAX_STRING_SIZE];
+  int count;
 } KeyValuePair;
 
 /// Calculates a timespec from a delay in milliseconds.
@@ -171,7 +172,6 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fdOut) {
   if (write(fdOut, "]\n", 2) < 0) {
     fprintf(stderr, "Failed to write to output file");
   }
-
   if (unlock_list(indexList)) {
     return 1;
   }
