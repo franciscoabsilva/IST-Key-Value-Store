@@ -65,6 +65,9 @@ Each client creates its unique communication pipes, ensuring isolation and concu
 
 When a client sends a command through the command pipe, the server processes it, executes the requested operation, and sends the result back to the client through the response pipe. This mechanism ensures asynchronous and non-blocking communication between clients and the server.
 
+### Subscriptions
+Subscriptions allow clients to monitor changes to specific key-value pairs. A client can subscribe to a key using kvs_subscribe, which registers the key for updates. When the key's value changes, the server sends a notification through a designated pipe. The client can also unsubscribe using kvs_unsubscribe, removing the key from notifications. Sessions last until the client disconnects or the server sends a termination signal (SIGUSR1).
+
 ### Signal Handling
 
 The server handles the `SIGUSR1` signal to manage active client connections and subscriptions gracefully:
